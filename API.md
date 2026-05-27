@@ -614,4 +614,4 @@ All errors return JSON.
 |--------|------|
 | `400` | Missing required field, invalid reference (unknown client/project ID) |
 | `404` | Record not found for the given ID |
-| `500` | Unexpected server error | 
+| `500` | Unexpected server error |  

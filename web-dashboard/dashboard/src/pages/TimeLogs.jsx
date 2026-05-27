@@ -13,12 +13,28 @@ function fmtDuration(s) {
   return `${sec}s`;
 }
 
-function fmtSk(iso) {
+function fmtDateTime(iso) {
   if (!iso) return '–';
-  return new Date(iso).toLocaleString('sk-SK', {
-    day: 'numeric', month: 'numeric', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function secsToHMS(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const p = n => String(n).padStart(2, '0');
+  return `${p(h)}:${p(m)}:${p(sec)}`;
+}
+
+function hmsToSecs(str) {
+  if (!str) return null;
+  const parts = str.trim().split(':').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const [h, m, s] = parts;
+  if (m > 59 || s > 59) return null;
+  return h * 3600 + m * 60 + s;
 }
 
 function toLocalIso(iso) {
@@ -31,7 +47,7 @@ function toLocalIso(iso) {
 const emptyForm = {
   client_id: '', project_id: '', app_id: '',
   start_timestamp: '', end_timestamp: '',
-  duration_seconds: '',
+  duration_hms: '',
   time_mode: 'end',
   notes: '', status: 'completed',
 };
@@ -94,7 +110,7 @@ export default function TimeLogs() {
       app_id: l.app_id ? String(l.app_id) : '',
       start_timestamp: startIso,
       end_timestamp: toLocalIso(endDate.toISOString()),
-      duration_seconds: String(l.duration_seconds),
+      duration_hms: secsToHMS(l.duration_seconds),
       time_mode: 'end',
       notes: l.notes || '',
       status: l.status,
@@ -116,9 +132,10 @@ export default function TimeLogs() {
       if (end <= start) { setError('End time must be after start time'); return; }
       duration_seconds = Math.round((end - start) / 1000);
     } else {
-      if (!form.duration_seconds) { setError('Duration is required'); return; }
-      duration_seconds = parseInt(form.duration_seconds);
-      if (duration_seconds <= 0) { setError('Duration must be a positive number'); return; }
+      const secs = hmsToSecs(form.duration_hms);
+      if (!secs) { setError('Duration must be in HH:MM:SS format (e.g. 01:30:00)'); return; }
+      if (secs <= 0) { setError('Duration must be greater than zero'); return; }
+      duration_seconds = secs;
     }
 
     const payload = {
@@ -166,10 +183,12 @@ export default function TimeLogs() {
 
   // Computed end hint for 'duration' mode
   const computedEnd = (() => {
-    if (form.time_mode !== 'duration' || !form.start_timestamp || !form.duration_seconds) return null;
-    const secs = parseInt(form.duration_seconds);
+    if (form.time_mode !== 'duration' || !form.start_timestamp || !form.duration_hms) return null;
+    const secs = hmsToSecs(form.duration_hms);
     if (!secs || secs <= 0) return null;
-    return new Date(new Date(form.start_timestamp).getTime() + secs * 1000);
+    const d = new Date(new Date(form.start_timestamp).getTime() + secs * 1000);
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
   })();
 
   return (
@@ -232,7 +251,7 @@ export default function TimeLogs() {
                     ? <span title={l.app_name}>{l.app_icon} {l.app_name}</span>
                     : <span className="text-slate-600">–</span>}
                 </td>
-                <td className="td text-sm text-slate-400">{fmtSk(l.start_timestamp)}</td>
+                <td className="td text-sm text-slate-400">{fmtDateTime(l.start_timestamp)}</td>
                 <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
                 <td className="td text-sm text-slate-500 max-w-[160px] truncate" title={l.notes}>{l.notes || ''}</td>
                 <td className="td">
@@ -344,16 +363,16 @@ export default function TimeLogs() {
                 </div>
               ) : (
                 <div>
-                  <label className="label">Duration <span className="text-slate-500 font-normal">(seconds)</span></label>
+                  <label className="label">Duration <span className="text-slate-500 font-normal">(HH:MM:SS)</span></label>
                   <input
-                    className="input" type="number" min="1" placeholder="e.g. 3600"
-                    value={form.duration_seconds}
-                    onChange={e => setForm(p => ({ ...p, duration_seconds: e.target.value }))}
+                    className="input font-mono tracking-widest" type="text"
+                    placeholder="01:30:00"
+                    maxLength={8}
+                    value={form.duration_hms}
+                    onChange={e => setForm(p => ({ ...p, duration_hms: e.target.value }))}
                   />
                   {computedEnd && (
-                    <p className="text-xs text-amber-400/80 mt-1">
-                      → ends {computedEnd.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                    </p>
+                    <p className="text-xs text-amber-400/80 mt-1">→ ends {computedEnd}</p>
                   )}
                 </div>
               )}

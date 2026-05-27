@@ -20,6 +20,13 @@ function fmtSecs(s) {
   return `${m}m`;
 }
 
+function fmtDateTime(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function fmtDuration(s) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -211,7 +218,7 @@ export default function Homepage() {
                   {l.app_name || <span className="text-slate-600">–</span>}
                 </td>
                 <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
-                <td className="td text-sm text-slate-500">{new Date(l.start_timestamp).toLocaleString()}</td>
+                <td className="td text-sm text-slate-500">{fmtDateTime(l.start_timestamp)}</td>
                 <td className="td">
                   <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>{l.status}</span>
                 </td>

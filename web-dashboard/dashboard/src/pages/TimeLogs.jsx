@@ -13,6 +13,14 @@ function fmtDuration(s) {
   return `${sec}s`;
 }
 
+function fmtSk(iso) {
+  if (!iso) return '–';
+  return new Date(iso).toLocaleString('sk-SK', {
+    day: 'numeric', month: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
 function toLocalIso(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -22,7 +30,9 @@ function toLocalIso(iso) {
 
 const emptyForm = {
   client_id: '', project_id: '', app_id: '',
-  start_timestamp: '', duration_seconds: '',
+  start_timestamp: '', end_timestamp: '',
+  duration_seconds: '',
+  time_mode: 'end',
   notes: '', status: 'completed',
 };
 
@@ -68,19 +78,24 @@ export default function TimeLogs() {
   useEffect(load, [load]);
 
   const openCreate = () => {
-    setForm({ ...emptyForm, start_timestamp: toLocalIso(new Date().toISOString()) });
+    const now = toLocalIso(new Date().toISOString());
+    setForm({ ...emptyForm, start_timestamp: now });
     setEditTarget(null);
     setError('');
     setModalOpen(true);
   };
 
   const openEdit = (l) => {
+    const startIso = toLocalIso(l.start_timestamp);
+    const endDate = new Date(new Date(l.start_timestamp).getTime() + l.duration_seconds * 1000);
     setForm({
       client_id: String(l.client_id),
       project_id: String(l.project_id),
       app_id: l.app_id ? String(l.app_id) : '',
-      start_timestamp: toLocalIso(l.start_timestamp),
+      start_timestamp: startIso,
+      end_timestamp: toLocalIso(endDate.toISOString()),
       duration_seconds: String(l.duration_seconds),
+      time_mode: 'end',
       notes: l.notes || '',
       status: l.status,
     });
@@ -92,12 +107,26 @@ export default function TimeLogs() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    let duration_seconds;
+    if (form.time_mode === 'end') {
+      if (!form.end_timestamp) { setError('End time is required'); return; }
+      const start = new Date(form.start_timestamp);
+      const end = new Date(form.end_timestamp);
+      if (end <= start) { setError('End time must be after start time'); return; }
+      duration_seconds = Math.round((end - start) / 1000);
+    } else {
+      if (!form.duration_seconds) { setError('Duration is required'); return; }
+      duration_seconds = parseInt(form.duration_seconds);
+      if (duration_seconds <= 0) { setError('Duration must be a positive number'); return; }
+    }
+
     const payload = {
       client_id: parseInt(form.client_id),
       project_id: parseInt(form.project_id),
       app_id: form.app_id ? parseInt(form.app_id) : null,
       start_timestamp: new Date(form.start_timestamp).toISOString(),
-      duration_seconds: parseInt(form.duration_seconds),
+      duration_seconds,
       notes: form.notes || null,
       status: form.status,
     };
@@ -127,6 +156,21 @@ export default function TimeLogs() {
       return next;
     });
   };
+
+  // Computed duration hint for 'end' mode
+  const computedDuration = (() => {
+    if (form.time_mode !== 'end' || !form.start_timestamp || !form.end_timestamp) return null;
+    const diff = Math.round((new Date(form.end_timestamp) - new Date(form.start_timestamp)) / 1000);
+    return diff > 0 ? diff : null;
+  })();
+
+  // Computed end hint for 'duration' mode
+  const computedEnd = (() => {
+    if (form.time_mode !== 'duration' || !form.start_timestamp || !form.duration_seconds) return null;
+    const secs = parseInt(form.duration_seconds);
+    if (!secs || secs <= 0) return null;
+    return new Date(new Date(form.start_timestamp).getTime() + secs * 1000);
+  })();
 
   return (
     <div>
@@ -188,7 +232,7 @@ export default function TimeLogs() {
                     ? <span title={l.app_name}>{l.app_icon} {l.app_name}</span>
                     : <span className="text-slate-600">–</span>}
                 </td>
-                <td className="td text-sm text-slate-400">{new Date(l.start_timestamp).toLocaleString()}</td>
+                <td className="td text-sm text-slate-400">{fmtSk(l.start_timestamp)}</td>
                 <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
                 <td className="td text-sm text-slate-500 max-w-[160px] truncate" title={l.notes}>{l.notes || ''}</td>
                 <td className="td">
@@ -237,6 +281,7 @@ export default function TimeLogs() {
               </select>
             </div>
           </div>
+
           <div>
             <label className="label">Application <span className="text-slate-500 font-normal">(optional)</span></label>
             <select
@@ -248,24 +293,73 @@ export default function TimeLogs() {
               {allApps.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name} ({a.category})</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Start Time</label>
-              <input
-                className="input" type="datetime-local" required
-                value={form.start_timestamp}
-                onChange={e => setForm(p => ({ ...p, start_timestamp: e.target.value }))}
-              />
+
+          {/* Time entry — toggle between end-time and duration */}
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <label className="label mb-0">Time</label>
+              <div className="flex rounded-lg overflow-hidden border border-slate-600 text-xs">
+                {[
+                  { key: 'end',      label: 'Start + End time' },
+                  { key: 'duration', label: 'Start + Duration' },
+                ].map(m => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, time_mode: m.key }))}
+                    className={`px-3 py-1.5 font-medium transition-colors ${
+                      form.time_mode === m.key
+                        ? 'bg-amber-500 text-slate-900'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <label className="label">Duration (seconds)</label>
-              <input
-                className="input" type="number" min="1" required placeholder="e.g. 3600"
-                value={form.duration_seconds}
-                onChange={e => setForm(p => ({ ...p, duration_seconds: e.target.value }))}
-              />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Start time</label>
+                <input
+                  className="input" type="datetime-local" required
+                  value={form.start_timestamp}
+                  onChange={e => setForm(p => ({ ...p, start_timestamp: e.target.value }))}
+                />
+              </div>
+
+              {form.time_mode === 'end' ? (
+                <div>
+                  <label className="label">End time</label>
+                  <input
+                    className="input" type="datetime-local" required
+                    value={form.end_timestamp}
+                    min={form.start_timestamp || undefined}
+                    onChange={e => setForm(p => ({ ...p, end_timestamp: e.target.value }))}
+                  />
+                  {computedDuration && (
+                    <p className="text-xs text-amber-400/80 mt-1">→ {fmtDuration(computedDuration)}</p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="label">Duration <span className="text-slate-500 font-normal">(seconds)</span></label>
+                  <input
+                    className="input" type="number" min="1" placeholder="e.g. 3600"
+                    value={form.duration_seconds}
+                    onChange={e => setForm(p => ({ ...p, duration_seconds: e.target.value }))}
+                  />
+                  {computedEnd && (
+                    <p className="text-xs text-amber-400/80 mt-1">
+                      → ends {computedEnd.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+
           <div>
             <label className="label">Notes <span className="text-slate-500 font-normal">(optional)</span></label>
             <textarea

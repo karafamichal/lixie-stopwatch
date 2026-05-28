@@ -19,28 +19,41 @@ static void writeTerminator() {
 namespace Nextion {
 
 void begin() {
-    // Try the target baud directly first — works after the first power cycle
-    // because `bauds=` persists on the display. On a fresh display we drop to
-    // 9600, set baud, then switch.
+    // The Nextion boots its uploaded HMI immediately on power-up and may run a
+    // built-in splash/animation in the meantime. We bring up UART at 9600 (its
+    // factory default), persist the faster baud, then re-attach at 115200 and
+    // hammer the display into a known blank state.
     NexSerial.begin(NEXTION_DEFAULT_BAUD, SERIAL_8N1, NEXTION_RX_PIN, NEXTION_TX_PIN);
-    delay(50);
-    // Persist the new baud rate so subsequent boots come up fast.
+    delay(100);
     NexSerial.print("bauds=");
     NexSerial.print(NEXTION_BAUD);
     writeTerminator();
     NexSerial.flush();
-    delay(100);
+    delay(150);
     NexSerial.end();
 
     NexSerial.begin(NEXTION_BAUD, SERIAL_8N1, NEXTION_RX_PIN, NEXTION_TX_PIN);
-    delay(50);
+    delay(100);
 
-    // Best-effort: disable command responses (we don't parse them) and turn
-    // on raw touch coordinate streaming.
-    cmd("bkcmd=0");
-    cmd("sendxy=1");
-    cmd("page 0");
-    clear(COL_BG);
+    // Silence any leftover boot reports.
+    while (NexSerial.available()) NexSerial.read();
+
+    // Disable ack/auto-sleep, enable touch coords, jump to page 0 and clear.
+    // Sent twice because the display sometimes drops the very first frame
+    // after a baud change.
+    for (int i = 0; i < 2; i++) {
+        cmd("bkcmd=0");
+        cmd("sleep=0");        // make sure the panel is awake
+        cmd("dim=100");        // backlight to 100%
+        cmd("thup=1");          // wake on touch
+        cmd("sendxy=1");
+        cmd("page 0");
+        cmd("cls 0");           // black wipe regardless of palette
+        delay(20);
+    }
+    clear(COL_BG);              // final paint in our background colour
+    rxLen = 0;
+    ffCount = 0;
 }
 
 void cmd(const String& c) {

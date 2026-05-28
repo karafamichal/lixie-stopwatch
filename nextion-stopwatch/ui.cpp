@@ -1,8 +1,10 @@
 #include "ui.h"
 #include "api.h"
 #include "config.h"
+#include "leddisplay.h"
 #include <WiFi.h>
 #include <time.h>
+#include <FastLED.h>
 
 namespace UI {
 
@@ -37,8 +39,14 @@ static uint32_t sLastTimerSec = 0;
 static String   sToastMsg;
 static uint32_t sToastUntil = 0;
 
-// Clock cache for idle screen
-static uint32_t sLastClockSec = 0;
+static CRGB rgb565ToCrgb(uint16_t c) {
+    uint8_t r = (c >> 11) & 0x1F;
+    uint8_t g = (c >>  5) & 0x3F;
+    uint8_t b =  c        & 0x1F;
+    return CRGB((r << 3) | (r >> 2),
+                (g << 2) | (g >> 4),
+                (b << 3) | (b >> 2));
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,36 +169,20 @@ static int listHit(const NextionTouch& t, int count) {
 // ---------------------------------------------------------------------------
 static void drawIdle() {
     Nextion::clear(COL_BG);
-    Nextion::drawTextCentered(0, 12, DISP_W, 24,
-                              FONT_MEDIUM, COL_ACCENT, COL_BG, "NIXIE STOPKY");
+    Nextion::drawTextCentered(0, 20, DISP_W, 40,
+                              FONT_LARGE, COL_ACCENT, COL_BG, "NIXIE STOPKY");
+    Nextion::drawTextCentered(0, 70, DISP_W, 24,
+                              FONT_MEDIUM, COL_MUTED, COL_BG,
+                              "Time is on the matrices");
 
-    // clock placeholder area — filled per-second by tick()
-    Nextion::fillRect(0, 70, DISP_W, 96, COL_BG);
-
-    // big "TAP TO START" hint at the bottom (the whole screen is the hotspot)
-    Nextion::fillRect(40, 184, DISP_W - 80, 36, COL_ACCENT);
-    Nextion::drawTextCentered(40, 184, DISP_W - 80, 36,
-                              FONT_MEDIUM, COL_BLACK, COL_ACCENT,
+    Nextion::fillRect(40, 130, DISP_W - 80, 50, COL_ACCENT);
+    Nextion::drawTextCentered(40, 130, DISP_W - 80, 50,
+                              FONT_LARGE, COL_BLACK, COL_ACCENT,
                               "TAP TO START");
 
-    // WiFi state in bottom corner
     drawFooterHint(WiFi.status() == WL_CONNECTED
                        ? "WiFi: " + WiFi.SSID() + "   " + WiFi.localIP().toString()
                        : "WiFi: disconnected");
-    sLastClockSec = 0;  // force refresh
-}
-
-static void redrawIdleClock() {
-    time_t now = time(nullptr);
-    if (now == sLastClockSec) return;
-    sLastClockSec = now;
-    struct tm tm_local;
-    localtime_r(&now, &tm_local);
-    char buf[12];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
-             tm_local.tm_hour, tm_local.tm_min, tm_local.tm_sec);
-    Nextion::drawTextSty(0, 70, DISP_W, 96, FONT_HUGE,
-                         COL_ACCENT, COL_BG, 1, 1, 1, String(buf));
 }
 
 static void drawClientScreen() {
@@ -222,32 +214,29 @@ static void drawAppScreen() {
 static void drawRunningScreen() {
     Nextion::clear(COL_BG);
 
-    // Top context
-    Nextion::fillRect(0, 0, DISP_W, 48, COL_PANEL);
-    Nextion::drawLine(0, 48, DISP_W, 48, sSelClientColor);
-    String topLine = sSelClientName + "  /  " + sSelProjectName;
-    Nextion::drawTextSty(8, 4, DISP_W - 16, 20,
-                         FONT_SMALL, COL_TEXT, COL_PANEL, 1, 1, 1, topLine);
-    Nextion::drawTextSty(8, 24, DISP_W - 16, 20,
+    // Top context strip
+    Nextion::fillRect(0, 0, DISP_W, 64, COL_PANEL);
+    Nextion::drawLine(0, 64, DISP_W, 64, sSelClientColor);
+    Nextion::drawTextSty(8, 4, DISP_W - 16, 28,
+                         FONT_MEDIUM, COL_TEXT, COL_PANEL, 1, 1, 1,
+                         sSelClientName);
+    Nextion::drawTextSty(8, 34, DISP_W - 16, 24,
                          FONT_SMALL, COL_MUTED, COL_PANEL, 1, 1, 1,
-                         sSelApp >= 0 ? sSelAppName : String("(no app)"));
+                         sSelProjectName + "   "
+                             + (sSelApp >= 0 ? sSelAppName : String("(no app)")));
 
-    // Timer area
-    Nextion::fillRect(0, 60, DISP_W, 110, COL_BG);
-    sLastTimerSec = 0;  // force redraw
+    // Indicator that the matrices are live, no Nextion-side timer.
+    Nextion::drawTextCentered(0, 88, DISP_W, 30,
+                              FONT_MEDIUM, COL_ACCENT, COL_BG,
+                              "Running — see matrices");
+    Nextion::drawTextCentered(0, 122, DISP_W, 20,
+                              FONT_SMALL, COL_MUTED, COL_BG,
+                              "Started " + sStartIso);
 
     // Big stop button
-    Nextion::fillRect(60, 184, DISP_W - 120, 44, COL_RED);
-    Nextion::drawTextCentered(60, 184, DISP_W - 120, 44,
+    Nextion::fillRect(60, 174, DISP_W - 120, 54, COL_RED);
+    Nextion::drawTextCentered(60, 174, DISP_W - 120, 54,
                               FONT_LARGE, COL_WHITE, COL_RED, "STOP");
-}
-
-static void redrawRunningTimer() {
-    uint32_t sec = (millis() - sStartMs) / 1000;
-    if (sec == sLastTimerSec) return;
-    sLastTimerSec = sec;
-    Nextion::drawTextSty(0, 60, DISP_W, 110, FONT_HUGE,
-                         sSelClientColor, COL_BG, 1, 1, 1, fmtHMS(sec));
 }
 
 static void drawConfirmScreen() {
@@ -255,14 +244,16 @@ static void drawConfirmScreen() {
     drawHeader("Save session?", false);
 
     Nextion::drawTextCentered(0, 56, DISP_W, 24,
-                              FONT_MEDIUM, COL_MUTED, COL_BG,
+                              FONT_MEDIUM, COL_TEXT, COL_BG,
                               sSelClientName + "  /  " + sSelProjectName);
+    Nextion::drawTextCentered(0, 82, DISP_W, 20,
+                              FONT_SMALL, COL_MUTED, COL_BG,
+                              sSelApp >= 0 ? sSelAppName : String("(no app)"));
 
-    Nextion::drawTextSty(0, 88, DISP_W, 70, FONT_HUGE,
-                         COL_ACCENT, COL_BG, 1, 1, 1,
-                         fmtHMS(sLastTimerSec));
+    Nextion::drawTextCentered(0, 114, DISP_W, 30,
+                              FONT_MEDIUM, COL_ACCENT, COL_BG,
+                              "Duration: " + fmtHMS(sLastTimerSec));
 
-    // Buttons
     Nextion::fillRect(28, 178, 156, 44, COL_PANEL);
     Nextion::drawTextCentered(28, 178, 156, 44,
                               FONT_MEDIUM, COL_MUTED, COL_PANEL, "Discard");
@@ -325,6 +316,7 @@ static void startSession(int appId, const String& appName) {
     sSelAppName = appName;
     sStartMs    = millis();
     sStartIso   = isoNowUtc();
+    LedDisplay::startStopwatch(sStartMs, rgb565ToCrgb(sSelClientColor));
     goTo(SCR_RUNNING);
 }
 
@@ -338,20 +330,23 @@ static void onTouchApp(const NextionTouch& t) {
 }
 
 static void onTouchRunning(const NextionTouch& t) {
-    if (inRect(t, 60, 184, DISP_W - 120, 44)) {
+    if (inRect(t, 60, 174, DISP_W - 120, 54)) {
         sLastTimerSec = (millis() - sStartMs) / 1000;
+        LedDisplay::holdDuration(sLastTimerSec, rgb565ToCrgb(sSelClientColor));
         goTo(SCR_CONFIRM);
     }
 }
 
 static void onTouchConfirm(const NextionTouch& t) {
     if (inRect(t, 28, 178, 156, 44)) {  // Discard
+        LedDisplay::clockMode();
         toast("Discarded");
         return;
     }
     if (inRect(t, DISP_W - 184, 178, 156, 44)) {  // Save
         bool ok = Api::postTimelog(sSelClient, sSelProject, sSelApp,
                                    sStartIso, sLastTimerSec);
+        LedDisplay::clockMode();
         toast(ok ? "Saved!" : "Save failed");
     }
 }
@@ -405,8 +400,6 @@ void tick() {
         sDirty = false;
     }
 
-    if (sScreen == SCR_IDLE)    redrawIdleClock();
-    if (sScreen == SCR_RUNNING) redrawRunningTimer();
 }
 
 void handleTouch(const NextionTouch& t) {

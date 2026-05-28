@@ -14,6 +14,7 @@
 #include "config.h"
 #include "nextion.h"
 #include "ui.h"
+#include "leddisplay.h"
 
 static void connectWiFi() {
     UI::showBootMessage("Connecting to WiFi...");
@@ -49,6 +50,8 @@ void setup() {
     Nextion::begin();
     UI::showBootMessage("Booting...");
 
+    LedDisplay::begin();   // matrices show 00:00:00 until NTP lands
+
     connectWiFi();
     syncNtp();
 
@@ -63,6 +66,7 @@ void loop() {
     }
 
     UI::tick();
+    LedDisplay::tick();
 
     delay(20);
 }

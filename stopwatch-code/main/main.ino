@@ -5,7 +5,7 @@
 Adafruit_NeoPixel matrix = Adafruit_NeoPixel(NUM_LEDS, PIN_MATRIX, NEO_GRB + NEO_KHZ800);
 
 
-const int NASTAV_JAS_PERCENTA = 20;  // Jas od 0% do 100%
+const int NASTAV_JAS_PERCENTA = 100;  // Jas od 0% do 100%
 
 const byte FARBA_R = 0;             // Červená zložka (0 až 255)
 const byte FARBA_G = 255;           // Zelená zložka (0 až 255) -> Default: Zelená

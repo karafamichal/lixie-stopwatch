@@ -21,11 +21,11 @@
 // ============================================================================
 // WiFi / API
 // ============================================================================
-#define WIFI_SSID     "YOUR_SSID"
-#define WIFI_PASSWORD "YOUR_PASSWORD"
+#define WIFI_SSID     "tomasnotebook"
+#define WIFI_PASSWORD "tomaskonotbuk"
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://192.168.1.100:5000/api/v1"
+#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
 #define HARDWARE_ID   "esp32_lixie_001"

@@ -4,6 +4,12 @@ The firmware draws **everything** at runtime via Nextion drawing commands
 (`cls`, `fill`, `xstr`, `line`, etc.). The HMI file therefore only has to
 provide the runtime fonts and a single empty page; no objects, no events.
 
+> ⚠ **Required.** A brand-new display ships with a factory demo HMI that
+> auto-runs an animation. That demo paints over our drawing commands and
+> produces the "demo screen on top of the normal screen" symptom. You **must**
+> upload the minimal HMI below at least once — after that, the demo is gone
+> forever and our drawing commands own the framebuffer.
+
 ## 1. Create the HMI
 
 1. Open Nextion Editor → **File ▸ New** → save as `nixie_stopky.HMI`.

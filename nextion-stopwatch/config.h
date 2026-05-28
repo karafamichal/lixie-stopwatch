@@ -19,6 +19,17 @@
 #define DISP_H  240
 
 // ============================================================================
+// WS2812B Lixie matrix
+// ============================================================================
+// 6 digit matrices (10 LEDs each) + 2 colon LEDs = 62 LEDs total.
+// Wired as a single chain on GPIO5 (avoid the UART pins 19/20).
+#define LED_PIN          5
+#define LED_NUM          62
+#define LED_BRIGHTNESS   60          // 0..255 — keep modest for current draw
+#define LED_COLON_LEFT   60
+#define LED_COLON_RIGHT  61
+
+// ============================================================================
 // WiFi / API
 // ============================================================================
 #define WIFI_SSID     "YOUR_SSID"

@@ -1,5 +1,6 @@
 #include "api.h"
 #include "config.h"
+#include "utf8cp1250.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -36,7 +37,7 @@ int fetchClients(Entity* out, int max) {
         if (n >= max) break;
         if (!obj["active"].as<bool>()) continue;
         out[n].id    = obj["id"].as<int>();
-        out[n].name  = obj["name"].as<const char*>();
+        out[n].name  = utf8ToAscii(obj["name"].as<const char*>());
         out[n].color = obj["color"].as<const char*>();
         out[n].extra = "";
         n++;
@@ -54,9 +55,9 @@ int fetchProjects(int clientId, Entity* out, int max) {
     for (JsonObject obj : doc.as<JsonArray>()) {
         if (n >= max) break;
         out[n].id    = obj["id"].as<int>();
-        out[n].name  = obj["name"].as<const char*>();
+        out[n].name  = utf8ToAscii(obj["name"].as<const char*>());
         out[n].color = obj["color"].as<const char*>();
-        out[n].extra = obj["client_name"].as<const char*>();
+        out[n].extra = utf8ToAscii(obj["client_name"].as<const char*>());
         n++;
     }
     return n;
@@ -71,10 +72,12 @@ int fetchApps(Entity* out, int max) {
     for (JsonObject obj : doc.as<JsonArray>()) {
         if (n >= max) break;
         out[n].id    = obj["id"].as<int>();
-        out[n].name  = obj["name"].as<const char*>();
+        out[n].name  = utf8ToAscii(obj["name"].as<const char*>());
         out[n].color = obj["color"].as<const char*>();
-        const char* icon = obj["icon"].as<const char*>();
-        out[n].extra = icon ? icon : "";
+        // The API delivers app icons as emoji — Nextion ASCII fonts can't
+        // render them, so we drop them rather than scattering '?' through
+        // the list rows.
+        out[n].extra = "";
         n++;
     }
     return n;

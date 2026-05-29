@@ -1,8 +1,8 @@
-// Nixie Stopky — Nextion NX4024T032 controller for ESP32-S3
+// Lixie Stopky — Nextion NX4024T032 controller for ESP32-S3
 //
 // Hardware:
-//   ESP32-S3 GPIO19 -> Nextion RX
-//   ESP32-S3 GPIO20 <- Nextion TX
+//   ESP32-S3 GPIO18 -> Nextion RX
+//   ESP32-S3 GPIO17 <- Nextion TX
 //   Common 5 V and GND.
 //
 // Display required setup: see HMI_SETUP.md. The HMI must contain page 0,
@@ -15,6 +15,8 @@
 #include "nextion.h"
 #include "ui.h"
 #include "leddisplay.h"
+#include "weather.h"
+#include "news.h"
 
 static void connectWiFi() {
     Serial.println("[wifi] connecting...");
@@ -52,7 +54,7 @@ static void syncNtp() {
 void setup() {
     Serial.begin(115200);
     delay(50);
-    Serial.println("\n=== Nixie Stopky — Nextion edition ===");
+    Serial.println("\n=== Lixie Stopky — Nextion edition ===");
 
     Serial.println("[boot] init leds...");
     Serial.flush();
@@ -60,7 +62,7 @@ void setup() {
     Serial.println("[boot] leds ok");
     Serial.flush();
 
-    Serial.println("[boot] init nextion (will reassign GPIO19/20)...");
+    Serial.println("[boot] init nextion (will reassign GPIO17/18)...");
     Serial.flush();
     Nextion::begin();
     Serial.println("[boot] nextion ok");
@@ -71,12 +73,36 @@ void setup() {
     connectWiFi();
     syncNtp();
 
+    Serial.println("[feed] initial weather + news fetch...");
+    Serial.flush();
+    Weather::refresh();
+    News::refresh();
+    Serial.printf("[feed] weather=%s news=%d\n",
+                  Weather::get().valid ? "ok" : "miss", News::count());
+
     Serial.println("[boot] entering idle");
     UI::goTo(UI::SCR_IDLE);
 }
 
+static void refreshFeeds() {
+    static uint32_t lastWeather = 0;
+    static uint32_t lastNews    = 0;
+
+    // Only do blocking HTTP work while idle, to keep stopwatch ticks tight.
+    if (UI::current() != UI::SCR_IDLE) return;
+
+    uint32_t now = millis();
+    if (now - lastWeather > WEATHER_REFRESH_MS) {
+        lastWeather = now;
+        Weather::refresh();
+    }
+    if (now - lastNews > NEWS_REFRESH_MS) {
+        lastNews = now;
+        News::refresh();
+    }
+}
+
 void loop() {
-    // Drain inbound serial — emit a touch event when a complete frame lands.
     NextionTouch t;
     while (Nextion::poll(t)) {
         UI::handleTouch(t);
@@ -84,6 +110,7 @@ void loop() {
 
     UI::tick();
     LedDisplay::tick();
+    refreshFeeds();
 
     delay(20);
 }

@@ -12,7 +12,7 @@ provide the runtime fonts and a single empty page; no objects, no events.
 
 ## 1. Create the HMI
 
-1. Open Nextion Editor → **File ▸ New** → save as `nixie_stopky.HMI`.
+1. Open Nextion Editor → **File ▸ New** → save as `lixie_stopky.HMI`.
 2. **Settings ▸ Device** → pick `NX4024T032_011` (Basic, 400×240, no touch
    layer disabled). Orientation: **Horizontal**.
 3. Page 0 — leave empty. Background colour: `4164` (matches `COL_BG`).
@@ -62,8 +62,8 @@ NX4024T032 pin   ESP32-S3-N16R8
 ─────────────    ───────────────
 +5V              5V  (use a 5V/2A supply — the display alone draws ~250 mA)
 GND              GND
-TX (yellow)      GPIO18  (RX1)
-RX (blue)        GPIO17  (TX1)
+TX (yellow)      GPIO17  (RX1)
+RX (blue)        GPIO18  (TX1)
 ```
 
 > GPIO19/20 are reserved for native USB on the N16R8 — using them for UART

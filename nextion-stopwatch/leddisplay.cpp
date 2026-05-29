@@ -7,7 +7,7 @@ namespace LedDisplay {
 enum Mode { MODE_BLANK, MODE_CLOCK, MODE_STOPWATCH, MODE_HOLD };
 
 static Mode     sMode        = MODE_BLANK;
-static CRGB     sColor       = CRGB(255, 80, 0);   // Nixie orange
+static CRGB     sColor       = CRGB(255, 80, 0);   // Lixie orange
 static uint32_t sStartMs     = 0;
 static uint32_t sHoldSeconds = 0;
 static uint32_t sLastSec     = 0xFFFFFFFF;          // force first draw
@@ -21,7 +21,7 @@ static void pushTime(uint32_t totalSec) {
 
 void begin() {
     initLeds();
-    setColonBlink(true, 1000);   // colons blink at 1 Hz like a real Nixie clock
+    setColonBlink(true, 1000);   // colons blink at 1 Hz like a real Lixie clock
     sMode = MODE_CLOCK;
     sLastSec = 0xFFFFFFFF;
 }

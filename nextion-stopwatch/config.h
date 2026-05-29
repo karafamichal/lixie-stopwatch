@@ -46,11 +46,31 @@
 #define HARDWARE_ID   "esp32_lixie_001"
 
 // ============================================================================
+// Idle-screen content sources (weather + news headlines)
+// ============================================================================
+// Weather location is derived from the device's public IP via ip-api.com,
+// then current conditions are pulled from Open-Meteo. No API key required.
+// RSS feed for the rotating headline at the bottom of the idle screen.
+//   Swap freely. https URLs are supported (TLS via setInsecure()).
+#define NEWS_RSS_URL "https://www.aktuality.sk/rss/"
+#define WEATHER_REFRESH_MS  (10UL * 60UL * 1000UL)
+#define NEWS_REFRESH_MS     (15UL * 60UL * 1000UL)
+#define NEWS_ROTATE_MS      8000UL
+
+// Used when ip-api.com geolocation fails (corporate networks, VPNs, rate
+// limits). Defaults to Bratislava so we still show a sane weather strip.
+#define WEATHER_FALLBACK_CITY "Bratislava"
+#define WEATHER_FALLBACK_LAT  48.1486f
+#define WEATHER_FALLBACK_LON  17.1077f
+
+// ============================================================================
 // NTP
 // ============================================================================
 #define NTP_SERVER_1  "pool.ntp.org"
 #define NTP_SERVER_2  "time.google.com"
-// CET with DST (Slovakia / Central Europe)
+// Europe/Bratislava — CET (UTC+1 winter) / CEST (UTC+2 summer DST).
+// Note: in POSIX TZ syntax the sign is inverted; "CET-1" means "CET is one
+// hour AHEAD of UTC" (i.e. UTC+1). DST switches last Sun of Mar / last Sun of Oct.
 #define TZ_STRING     "CET-1CEST,M3.5.0,M10.5.0/3"
 
 // ============================================================================
@@ -69,7 +89,7 @@
 #define COL_PANEL     0x2104  // panel surface
 #define COL_TEXT      0xFFFF
 #define COL_MUTED     0xAD75  // grey text
-#define COL_ACCENT    0xFB00  // Nixie orange (#FF8000)
+#define COL_ACCENT    0xFB00  // Lixie orange (#FF8000)
 #define COL_GREEN     0x07E0
 #define COL_RED       0xF800
 #define COL_BLUE      0x2D9F

@@ -2,6 +2,8 @@
 #include "api.h"
 #include "config.h"
 #include "leddisplay.h"
+#include "weather.h"
+#include "news.h"
 #include <WiFi.h>
 #include <time.h>
 #include <FastLED.h>
@@ -19,8 +21,13 @@ static Entity sClients[MAX_ENTITIES];   static int sClientCount  = 0;
 static Entity sProjects[MAX_ENTITIES];  static int sProjectCount = 0;
 static Entity sApps[MAX_ENTITIES];      static int sAppCount     = 0;
 
-static int sListOffset = 0;                  // top index for scrolling lists
-static const int LIST_VISIBLE = 4;            // rows on screen at once
+// One scroll offset per list-screen. Preserved across back-navigation, reset
+// only when the underlying list is refetched (new client → fresh project list).
+static int sClientOffset  = 0;
+static int sProjectOffset = 0;
+static int sAppOffset     = 0;
+
+static const int LIST_VISIBLE = 4;
 static const int ROW_H = 44;
 static const int ROW_X = 12, ROW_Y0 = 52, ROW_W = 376;
 
@@ -30,10 +37,24 @@ static int sSelProject = -1;   static String sSelProjectName;
 static int sSelApp     = -1;   static String sSelAppName;
 static uint16_t sSelClientColor = COL_ACCENT;
 
-// Stopwatch
-static uint32_t sStartMs    = 0;
-static String   sStartIso;  // captured at moment of START
-static uint32_t sLastTimerSec = 0;
+// Stopwatch + pause bookkeeping.
+//   sSegmentStartMs = millis() the current running segment began at
+//   sAccumSec       = total active seconds before the current segment
+// total elapsed = sAccumSec + (sPaused ? 0 : (millis() - sSegmentStartMs) / 1000)
+static uint32_t sStartMs        = 0;
+static time_t   sStartEpoch     = 0;
+static String   sStartIso;            // ISO-8601 UTC for the API
+static String   sStartLocal;          // "DD.MM.YYYY HH:MM" for the screen
+static uint32_t sLastTimerSec   = 0;  // captured when STOP is pressed
+static uint32_t sSegmentStartMs = 0;
+static uint32_t sAccumSec       = 0;
+static bool     sPaused         = false;
+
+// Idle-screen feed tracking
+static uint32_t sIdleWeatherDrawnMs = 0;
+static uint32_t sIdleNewsDrawnMs    = 0;
+static uint32_t sIdleNewsRotateMs   = 0;
+static int      sIdleNewsIdx        = 0;
 
 // Toast
 static String   sToastMsg;
@@ -84,6 +105,19 @@ static bool inRect(const NextionTouch& t, int x, int y, int w, int h) {
            t.y >= (uint16_t)y && t.y < (uint16_t)(y + h);
 }
 
+static String formatLocalDateTime(time_t t) {
+    struct tm tm_local;
+    localtime_r(&t, &tm_local);
+    char b[24];
+    strftime(b, sizeof(b), "%d.%m.%Y %H:%M", &tm_local);
+    return String(b);
+}
+
+static uint32_t currentElapsedSec() {
+    if (sPaused) return sAccumSec;
+    return sAccumSec + (millis() - sSegmentStartMs) / 1000;
+}
+
 // ---------------------------------------------------------------------------
 // Drawing — header strip used on every non-idle screen
 // ---------------------------------------------------------------------------
@@ -107,11 +141,10 @@ static void drawFooterHint(const String& s) {
 // ---------------------------------------------------------------------------
 // List rendering (shared by client/project/app screens)
 // ---------------------------------------------------------------------------
-static void drawList(Entity* items, int count, const String& emptyMsg) {
-    // background panels for visible rows
+static void drawList(Entity* items, int count, const String& emptyMsg, int offset) {
     for (int i = 0; i < LIST_VISIBLE; ++i) {
         int y = ROW_Y0 + i * ROW_H;
-        int idx = sListOffset + i;
+        int idx = offset + i;
         Nextion::fillRect(ROW_X, y, ROW_W, ROW_H - 4, COL_PANEL);
 
         if (idx >= count) continue;
@@ -119,16 +152,10 @@ static void drawList(Entity* items, int count, const String& emptyMsg) {
         Entity& e = items[idx];
         uint16_t col = hexToRgb565(e.color);
 
-        // colour swatch
         Nextion::fillRect(ROW_X + 8, y + 8, 24, ROW_H - 20, col);
 
-        // label
         String label = e.name;
         if (e.extra.length() && (e.extra[0] != 0)) {
-            // For apps the extra is the icon (emoji) — Nextion's built-in fonts
-            // usually don't render emoji, so we prepend the first char as a
-            // lightweight marker only when ASCII. Projects keep client_name as
-            // an extra hint.
             label = e.extra + "  " + e.name;
         }
         Nextion::drawTextSty(ROW_X + 40, y + 4, ROW_W - 50, ROW_H - 12,
@@ -140,7 +167,6 @@ static void drawList(Entity* items, int count, const String& emptyMsg) {
                                   FONT_MEDIUM, COL_MUTED, COL_BG, emptyMsg);
     }
 
-    // scroll controls (right side)
     int btnX = DISP_W - 44;
     Nextion::fillRect(btnX, ROW_Y0, 32, 60, COL_PANEL);
     Nextion::drawTextCentered(btnX, ROW_Y0, 32, 60, FONT_LARGE, COL_TEXT, COL_PANEL, "^");
@@ -148,16 +174,15 @@ static void drawList(Entity* items, int count, const String& emptyMsg) {
     Nextion::drawTextCentered(btnX, ROW_Y0 + 100, 32, 60, FONT_LARGE, COL_TEXT, COL_PANEL, "v");
 }
 
-// Hit-test the list region. Returns selected index, or -2 for "scroll up",
-// -3 for "scroll down", -1 for nothing.
-static int listHit(const NextionTouch& t, int count) {
+// -2 = scroll up, -3 = scroll down, -1 = no hit, otherwise list index.
+static int listHit(const NextionTouch& t, int count, int offset) {
     int btnX = DISP_W - 44;
     if (inRect(t, btnX, ROW_Y0, 32, 60)) return -2;
     if (inRect(t, btnX, ROW_Y0 + 100, 32, 60)) return -3;
     for (int i = 0; i < LIST_VISIBLE; ++i) {
         int y = ROW_Y0 + i * ROW_H;
         if (inRect(t, ROW_X, y, ROW_W, ROW_H - 4)) {
-            int idx = sListOffset + i;
+            int idx = offset + i;
             if (idx >= 0 && idx < count) return idx;
         }
     }
@@ -167,18 +192,58 @@ static int listHit(const NextionTouch& t, int count) {
 // ---------------------------------------------------------------------------
 // Per-screen draw functions
 // ---------------------------------------------------------------------------
+//
+// Idle screen layout (400 x 240):
+//   y=  4..42  title "LIXIE STOPKY"
+//   y= 48..82  weather panel (city, temp, condition)
+//   y= 88..136 news headline (rotates every NEWS_ROTATE_MS)
+//   y=148..200 "TAP TO START" button
+//   y=222..240 WiFi footer
+
+static void drawIdleWeather() {
+    const WeatherInfo& w = Weather::get();
+    Nextion::fillRect(20, 48, DISP_W - 40, 36, COL_PANEL);
+    String line;
+    if (w.valid) {
+        char buf[80];
+        // Font is ASCII-only — no degree-sign glyph, so use " C".
+        snprintf(buf, sizeof(buf), "%s   %.1f C   %s",
+                 w.city.c_str(), w.tempC, w.condition.c_str());
+        line = buf;
+    } else {
+        line = "Weather unavailable";
+    }
+    Nextion::drawTextCentered(20, 48, DISP_W - 40, 36,
+                              FONT_MEDIUM, COL_TEXT, COL_PANEL, line);
+    sIdleWeatherDrawnMs = w.lastUpdateMs;
+}
+
+static void drawIdleNews() {
+    Nextion::fillRect(20, 88, DISP_W - 40, 48, COL_BG);
+    String headline;
+    if (News::count() > 0) {
+        sIdleNewsIdx %= News::count();
+        headline = "* " + News::get(sIdleNewsIdx);
+    } else {
+        headline = "Loading news...";
+    }
+    Nextion::drawTextCentered(20, 88, DISP_W - 40, 48,
+                              FONT_SMALL, COL_MUTED, COL_BG, headline);
+    sIdleNewsDrawnMs  = News::lastUpdateMs();
+    sIdleNewsRotateMs = millis();
+}
+
 static void drawIdle() {
     Nextion::clear(COL_BG);
-    Nextion::drawTextCentered(0, 20, DISP_W, 40,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "NIXIE STOPKY");
-    Nextion::drawTextCentered(0, 70, DISP_W, 24,
-                              FONT_MEDIUM, COL_MUTED, COL_BG,
-                              "Time is on the matrices");
+    Nextion::drawTextCentered(0, 4, DISP_W, 38,
+                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPKY");
 
-    Nextion::fillRect(40, 130, DISP_W - 80, 50, COL_ACCENT);
-    Nextion::drawTextCentered(40, 130, DISP_W - 80, 50,
-                              FONT_LARGE, COL_BLACK, COL_ACCENT,
-                              "TAP TO START");
+    drawIdleWeather();
+    drawIdleNews();
+
+    Nextion::fillRect(60, 148, DISP_W - 120, 52, COL_ACCENT);
+    Nextion::drawTextCentered(60, 148, DISP_W - 120, 52,
+                              FONT_LARGE, COL_BLACK, COL_ACCENT, "TAP TO START");
 
     drawFooterHint(WiFi.status() == WL_CONNECTED
                        ? "WiFi: " + WiFi.SSID() + "   " + WiFi.localIP().toString()
@@ -188,23 +253,22 @@ static void drawIdle() {
 static void drawClientScreen() {
     Nextion::clear(COL_BG);
     drawHeader("Select client", false);
-    drawList(sClients, sClientCount, "No clients available");
+    drawList(sClients, sClientCount, "No clients available", sClientOffset);
     drawFooterHint("Tap a client to continue");
 }
 
 static void drawProjectScreen() {
     Nextion::clear(COL_BG);
     drawHeader(String("Project — ") + sSelClientName, true);
-    drawList(sProjects, sProjectCount, "No projects for this client");
+    drawList(sProjects, sProjectCount, "No projects for this client", sProjectOffset);
     drawFooterHint("Tap a project to continue");
 }
 
 static void drawAppScreen() {
     Nextion::clear(COL_BG);
     drawHeader(String("App — ") + sSelProjectName, true);
-    drawList(sApps, sAppCount, "No apps available");
+    drawList(sApps, sAppCount, "No apps available", sAppOffset);
 
-    // "Skip app" button — app is optional in the API.
     Nextion::fillRect(12, DISP_H - 44, 120, 30, COL_PANEL);
     Nextion::drawTextCentered(12, DISP_H - 44, 120, 30,
                               FONT_SMALL, COL_TEXT, COL_PANEL, "Skip app");
@@ -215,27 +279,40 @@ static void drawRunningScreen() {
     Nextion::clear(COL_BG);
 
     // Top context strip
-    Nextion::fillRect(0, 0, DISP_W, 64, COL_PANEL);
-    Nextion::drawLine(0, 64, DISP_W, 64, sSelClientColor);
-    Nextion::drawTextSty(8, 4, DISP_W - 16, 28,
+    Nextion::fillRect(0, 0, DISP_W, 56, COL_PANEL);
+    Nextion::drawLine(0, 56, DISP_W, 56, sSelClientColor);
+    Nextion::drawTextSty(8, 4, DISP_W - 16, 24,
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 1, 1, 1,
                          sSelClientName);
-    Nextion::drawTextSty(8, 34, DISP_W - 16, 24,
+    Nextion::drawTextSty(8, 30, DISP_W - 16, 22,
                          FONT_SMALL, COL_MUTED, COL_PANEL, 1, 1, 1,
                          sSelProjectName + "   "
                              + (sSelApp >= 0 ? sSelAppName : String("(no app)")));
 
-    // Indicator that the matrices are live, no Nextion-side timer.
-    Nextion::drawTextCentered(0, 88, DISP_W, 30,
-                              FONT_MEDIUM, COL_ACCENT, COL_BG,
-                              "Running — see matrices");
-    Nextion::drawTextCentered(0, 122, DISP_W, 20,
-                              FONT_SMALL, COL_MUTED, COL_BG,
-                              "Started " + sStartIso);
+    // Status
+    Nextion::drawTextCentered(0, 66, DISP_W, 38,
+                              FONT_LARGE,
+                              sPaused ? COL_RED : COL_GREEN, COL_BG,
+                              sPaused ? "PAUSED" : "RUNNING");
 
-    // Big stop button
-    Nextion::fillRect(60, 174, DISP_W - 120, 54, COL_RED);
-    Nextion::drawTextCentered(60, 174, DISP_W - 120, 54,
+    // Human-readable start time
+    Nextion::drawTextCentered(0, 112, DISP_W, 30,
+                              FONT_MEDIUM, COL_TEXT, COL_BG,
+                              "Started: " + sStartLocal);
+
+    // Pause / Continue button (left). CONTINUE is too long for FONT_LARGE in
+    // the available 170 px width; drop to FONT_MEDIUM so it fits cleanly.
+    uint16_t pauseBg   = sPaused ? COL_GREEN : COL_BLUE;
+    uint16_t pauseFg   = sPaused ? COL_BLACK : COL_WHITE;
+    uint8_t  pauseFont = sPaused ? FONT_MEDIUM : FONT_LARGE;
+    Nextion::fillRect(20, 162, 170, 58, pauseBg);
+    Nextion::drawTextCentered(20, 162, 170, 58,
+                              pauseFont, pauseFg, pauseBg,
+                              sPaused ? "CONTINUE" : "PAUSE");
+
+    // Stop button (right)
+    Nextion::fillRect(210, 162, 170, 58, COL_RED);
+    Nextion::drawTextCentered(210, 162, 170, 58,
                               FONT_LARGE, COL_WHITE, COL_RED, "STOP");
 }
 
@@ -273,65 +350,92 @@ static void drawToastScreen() {
 // ---------------------------------------------------------------------------
 // Touch handlers
 // ---------------------------------------------------------------------------
+static void onScrollHit(int hit, int count, int& offset) {
+    if (hit == -2 && offset > 0) { offset--; sDirty = true; }
+    if (hit == -3 && offset + LIST_VISIBLE < count) { offset++; sDirty = true; }
+}
+
 static void onTouchIdle(const NextionTouch& t) {
-    // Any tap → fetch clients and move on.
     goTo(SCR_CLIENT);
-    sClientCount = Api::fetchClients(sClients, MAX_ENTITIES);
-    sListOffset = 0;
+    sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
+    sClientOffset = 0;   // fresh fetch, jump to top
     sDirty = true;
 }
 
-static void onScrollHit(int hit, int count) {
-    if (hit == -2 && sListOffset > 0) { sListOffset--; sDirty = true; }
-    if (hit == -3 && sListOffset + LIST_VISIBLE < count) { sListOffset++; sDirty = true; }
-}
-
 static void onTouchClient(const NextionTouch& t) {
-    int hit = listHit(t, sClientCount);
-    if (hit < 0) { onScrollHit(hit, sClientCount); return; }
+    int hit = listHit(t, sClientCount, sClientOffset);
+    if (hit < 0) { onScrollHit(hit, sClientCount, sClientOffset); return; }
     Entity& c = sClients[hit];
     sSelClient      = c.id;
     sSelClientName  = c.name;
     sSelClientColor = hexToRgb565(c.color);
     sProjectCount   = Api::fetchProjects(c.id, sProjects, MAX_ENTITIES);
-    sListOffset = 0;
+    sProjectOffset  = 0;  // new project list for a new client
     goTo(SCR_PROJECT);
 }
 
 static void onTouchProject(const NextionTouch& t) {
-    // Back arrow
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CLIENT); return; }
-    int hit = listHit(t, sProjectCount);
-    if (hit < 0) { onScrollHit(hit, sProjectCount); return; }
+    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CLIENT); return; }  // back keeps sClientOffset
+    int hit = listHit(t, sProjectCount, sProjectOffset);
+    if (hit < 0) { onScrollHit(hit, sProjectCount, sProjectOffset); return; }
     Entity& p = sProjects[hit];
     sSelProject     = p.id;
     sSelProjectName = p.name;
-    sAppCount = Api::fetchApps(sApps, MAX_ENTITIES);
-    sListOffset = 0;
+    sAppCount   = Api::fetchApps(sApps, MAX_ENTITIES);
+    sAppOffset  = 0;     // fresh app list
     goTo(SCR_APP);
 }
 
 static void startSession(int appId, const String& appName) {
-    sSelApp     = appId;
-    sSelAppName = appName;
-    sStartMs    = millis();
-    sStartIso   = isoNowUtc();
+    sSelApp         = appId;
+    sSelAppName     = appName;
+    sStartMs        = millis();
+    sStartEpoch     = time(nullptr);
+    sStartIso       = isoNowUtc();
+    sStartLocal     = formatLocalDateTime(sStartEpoch);
+    sSegmentStartMs = millis();
+    sAccumSec       = 0;
+    sPaused         = false;
     LedDisplay::startStopwatch(sStartMs, rgb565ToCrgb(sSelClientColor));
     goTo(SCR_RUNNING);
 }
 
 static void onTouchApp(const NextionTouch& t) {
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }
+    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }  // back keeps sProjectOffset
     if (inRect(t, 12, DISP_H - 44, 120, 30)) { startSession(-1, "(no app)"); return; }
-    int hit = listHit(t, sAppCount);
-    if (hit < 0) { onScrollHit(hit, sAppCount); return; }
+    int hit = listHit(t, sAppCount, sAppOffset);
+    if (hit < 0) { onScrollHit(hit, sAppCount, sAppOffset); return; }
     Entity& a = sApps[hit];
     startSession(a.id, a.name);
 }
 
+static void togglePause() {
+    CRGB col = rgb565ToCrgb(sSelClientColor);
+    if (sPaused) {
+        // Resume: start a new active segment. Tell the LED display the start
+        // time it should pretend the stopwatch began, so the displayed total
+        // continues smoothly.
+        sSegmentStartMs = millis();
+        sPaused = false;
+        LedDisplay::startStopwatch(millis() - sAccumSec * 1000UL, col);
+    } else {
+        // Pause: bank the current segment, freeze LED matrix.
+        sAccumSec += (millis() - sSegmentStartMs) / 1000;
+        sPaused = true;
+        LedDisplay::holdDuration(sAccumSec, col);
+    }
+}
+
 static void onTouchRunning(const NextionTouch& t) {
-    if (inRect(t, 60, 174, DISP_W - 120, 54)) {
-        sLastTimerSec = (millis() - sStartMs) / 1000;
+    // Pause / Continue (left)
+    if (inRect(t, 20, 162, 170, 58)) {
+        togglePause();
+        sDirty = true;
+        return;
+    }
+    // Stop (right)
+    if (inRect(t, 210, 162, 170, 58)) {
+        sLastTimerSec = currentElapsedSec();
         LedDisplay::holdDuration(sLastTimerSec, rgb565ToCrgb(sSelClientColor));
         goTo(SCR_CONFIRM);
     }
@@ -357,7 +461,7 @@ static void onTouchConfirm(const NextionTouch& t) {
 void showBootMessage(const String& msg) {
     Nextion::clear(COL_BG);
     Nextion::drawTextCentered(0, 80, DISP_W, 40,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "NIXIE STOPKY");
+                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPKY");
     Nextion::drawTextCentered(0, 130, DISP_W, 30,
                               FONT_MEDIUM, COL_MUTED, COL_BG, msg);
     sScreen = SCR_BOOT;
@@ -381,7 +485,6 @@ void toast(const String& message, uint16_t ms) {
 void tick() {
     // Toast auto-dismiss
     if (sScreen == SCR_TOAST && millis() >= sToastUntil) {
-        // Clear out session state after a save/discard cycle.
         sSelApp = -1;
         goTo(SCR_IDLE);
     }
@@ -400,6 +503,21 @@ void tick() {
         sDirty = false;
     }
 
+    // Idle-screen ambient updates: weather strip refreshes when its source
+    // data lands, news headline rotates on a timer.
+    if (sScreen == SCR_IDLE) {
+        if (Weather::get().lastUpdateMs != sIdleWeatherDrawnMs) {
+            drawIdleWeather();
+        }
+        if (News::lastUpdateMs() != sIdleNewsDrawnMs) {
+            sIdleNewsIdx = 0;
+            drawIdleNews();
+        } else if (News::count() > 1 &&
+                   millis() - sIdleNewsRotateMs > NEWS_ROTATE_MS) {
+            sIdleNewsIdx = (sIdleNewsIdx + 1) % News::count();
+            drawIdleNews();
+        }
+    }
 }
 
 void handleTouch(const NextionTouch& t) {

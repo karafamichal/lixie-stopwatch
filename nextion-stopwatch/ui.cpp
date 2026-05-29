@@ -61,6 +61,12 @@ static String   sToastMsg;
 static uint32_t sToastUntil = 0;
 static Screen   sToastNext  = SCR_IDLE;
 
+// Discard-confirm context: where to land if the user picks Yes, and where to
+// go back to on No. Set by the caller right before transitioning into
+// SCR_DISCARD_CONFIRM.
+enum DiscardKind { DISCARD_FROM_RUNNING, DISCARD_FROM_CONFIRM };
+static DiscardKind sDiscardKind = DISCARD_FROM_RUNNING;
+
 static CRGB rgb565ToCrgb(uint16_t c) {
     uint8_t r = (c >> 11) & 0x1F;
     uint8_t g = (c >>  5) & 0x3F;
@@ -387,18 +393,81 @@ static void drawToastScreen() {
                               FONT_LARGE, COL_TEXT, COL_PANEL, sToastMsg);
 }
 
+static void drawDiscardConfirmScreen() {
+    Nextion::clear(COL_BG);
+
+    // Modal panel
+    Nextion::fillRect(20, 30, DISP_W - 40, 130, COL_PANEL);
+    Nextion::drawLine(20, 30, DISP_W - 20, 30, COL_RED);
+    Nextion::drawLine(20, 160, DISP_W - 20, 160, COL_RED);
+
+    Nextion::drawTextCentered(20, 44, DISP_W - 40, 36,
+                              FONT_LARGE, COL_TEXT, COL_PANEL,
+                              "Discard session?");
+    Nextion::drawTextCentered(20, 88, DISP_W - 40, 26,
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL,
+                              "All elapsed time will be lost.");
+    // Show how much they'd be losing.
+    Nextion::drawTextCentered(20, 118, DISP_W - 40, 28,
+                              FONT_MEDIUM, COL_ACCENT, COL_PANEL,
+                              "Tracked: " + fmtHMS(
+                                  sDiscardKind == DISCARD_FROM_RUNNING
+                                      ? currentElapsedSec()
+                                      : sLastTimerSec));
+
+    // No, keep — left, safe
+    Nextion::fillRect(28, 178, 160, 50, COL_BLUE);
+    Nextion::drawTextCentered(28, 178, 160, 50,
+                              FONT_MEDIUM, COL_WHITE, COL_BLUE, "No, keep");
+
+    // Yes, discard — right, destructive
+    Nextion::fillRect(DISP_W - 188, 178, 160, 50, COL_RED);
+    Nextion::drawTextCentered(DISP_W - 188, 178, 160, 50,
+                              FONT_MEDIUM, COL_WHITE, COL_RED, "Yes, discard");
+}
+
 // ---------------------------------------------------------------------------
 // Touch handlers
 // ---------------------------------------------------------------------------
+static void askDiscard(DiscardKind kind) {
+    sDiscardKind = kind;
+    goTo(SCR_DISCARD_CONFIRM);
+}
+
 static void goHome() {
-    LedDisplay::clockMode();
+    // SCR_RUNNING covers both the live-running state and the paused state
+    // (paused is just sPaused=true on the same screen). Either way the user
+    // has elapsed time that would be lost, so the dialog must fire.
     if (sScreen == SCR_RUNNING) {
-        // Running session is abandoned — make that visible.
-        toast("Discarded", 1200, SCR_IDLE);
+        askDiscard(DISCARD_FROM_RUNNING);
         return;
     }
+    // Confirm screen also holds an unsaved measurement.
+    if (sScreen == SCR_CONFIRM) {
+        askDiscard(DISCARD_FROM_CONFIRM);
+        return;
+    }
+    LedDisplay::clockMode();
     sSelApp = -1;
     goTo(SCR_IDLE);
+}
+
+static void onTouchDiscardConfirm(const NextionTouch& t) {
+    // "No, keep" — bail out, go back to where we came from.
+    if (inRect(t, 28, 178, 160, 50)) {
+        goTo(sDiscardKind == DISCARD_FROM_RUNNING ? SCR_RUNNING : SCR_CONFIRM);
+        return;
+    }
+    // "Yes, discard" — actually destroy the session.
+    if (inRect(t, DISP_W - 188, 178, 160, 50)) {
+        LedDisplay::clockMode();
+        if (sDiscardKind == DISCARD_FROM_RUNNING) {
+            toast("Discarded", 1200, SCR_IDLE);
+        } else {
+            toast("Discarded", 1200, SCR_APP);
+        }
+        return;
+    }
 }
 
 static void onScrollHit(int hit, int count, int& offset) {
@@ -496,10 +565,12 @@ static void onTouchRunning(const NextionTouch& t) {
         sDirty = true;
         return;
     }
-    // Stop (right)
+    // Stop (right) — capture elapsed for the API + the dialog, then swing
+    // the matrix back to wall clock. Only Running and Paused states show
+    // the stopwatch on the LEDs; Confirm shows the time of day.
     if (inRect(t, 210, 162, 170, 58)) {
         sLastTimerSec = currentElapsedSec();
-        LedDisplay::holdDuration(sLastTimerSec, rgb565ToCrgb(sSelClientColor));
+        LedDisplay::clockMode();
         goTo(SCR_CONFIRM);
     }
 }
@@ -507,11 +578,9 @@ static void onTouchRunning(const NextionTouch& t) {
 static void onTouchConfirm(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
     if (inRect(t, 28, 178, 156, 44)) {  // Discard
-        // Flash "Discarded", then drop straight back to the app picker —
-        // the client and project are almost always right, the app is the
-        // easy thing to misclick.
-        LedDisplay::clockMode();
-        toast("Discarded", 1500, SCR_APP);
+        // Ask for confirmation — losing a tracked session by misclick is
+        // worse than one extra tap.
+        askDiscard(DISCARD_FROM_CONFIRM);
         return;
     }
     if (inRect(t, DISP_W - 184, 178, 156, 44)) {  // Save
@@ -559,14 +628,15 @@ void tick() {
 
     if (sDirty) {
         switch (sScreen) {
-            case SCR_BOOT:    /* drawn by showBootMessage */ break;
-            case SCR_IDLE:    drawIdle();           break;
-            case SCR_CLIENT:  drawClientScreen();   break;
-            case SCR_PROJECT: drawProjectScreen();  break;
-            case SCR_APP:     drawAppScreen();      break;
-            case SCR_RUNNING: drawRunningScreen();  break;
-            case SCR_CONFIRM: drawConfirmScreen();  break;
-            case SCR_TOAST:   drawToastScreen();    break;
+            case SCR_BOOT:            /* drawn by showBootMessage */ break;
+            case SCR_IDLE:            drawIdle();                 break;
+            case SCR_CLIENT:          drawClientScreen();         break;
+            case SCR_PROJECT:         drawProjectScreen();        break;
+            case SCR_APP:             drawAppScreen();            break;
+            case SCR_RUNNING:         drawRunningScreen();        break;
+            case SCR_CONFIRM:         drawConfirmScreen();        break;
+            case SCR_DISCARD_CONFIRM: drawDiscardConfirmScreen(); break;
+            case SCR_TOAST:           drawToastScreen();          break;
         }
         sDirty = false;
     }
@@ -591,12 +661,13 @@ void tick() {
 void handleTouch(const NextionTouch& t) {
     if (!t.pressed) return;  // act on press, ignore release
     switch (sScreen) {
-        case SCR_IDLE:    onTouchIdle(t);    break;
-        case SCR_CLIENT:  onTouchClient(t);  break;
-        case SCR_PROJECT: onTouchProject(t); break;
-        case SCR_APP:     onTouchApp(t);     break;
-        case SCR_RUNNING: onTouchRunning(t); break;
-        case SCR_CONFIRM: onTouchConfirm(t); break;
+        case SCR_IDLE:            onTouchIdle(t);           break;
+        case SCR_CLIENT:          onTouchClient(t);         break;
+        case SCR_PROJECT:         onTouchProject(t);        break;
+        case SCR_APP:             onTouchApp(t);            break;
+        case SCR_RUNNING:         onTouchRunning(t);        break;
+        case SCR_CONFIRM:         onTouchConfirm(t);        break;
+        case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
         default: break;
     }
 }

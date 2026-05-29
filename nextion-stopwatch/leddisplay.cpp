@@ -14,7 +14,7 @@ namespace LedDisplay {
 enum Mode { MODE_BLANK, MODE_CLOCK, MODE_STOPWATCH, MODE_HOLD };
 
 static Mode     sMode        = MODE_BLANK;
-static CRGB     sColor       = CRGB(255, 80, 0);   // Nixie orange
+static CRGB     sColor       = CRGB(255, 80, 0);   // Lixie orange
 static uint32_t sStartMs     = 0;
 static uint32_t sHoldSeconds = 0;
 static uint32_t sLastSec     = 0xFFFFFFFF;          // force first draw

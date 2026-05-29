@@ -40,9 +40,9 @@ void tick();
 // Forward a touch into the active screen's hit-tester.
 void handleTouch(const NextionTouch& t);
 
-// Brief banner (e.g. "Saved!", "POST failed"). Shown for `ms` then auto-returns
-// to SCR_IDLE.
-void toast(const String& message, uint16_t ms = 1500);
+// Brief banner (e.g. "Saved!", "POST failed"). Shown for `ms`, then auto-
+// transitions to `nextScreen` (defaults to SCR_IDLE).
+void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_IDLE);
 
 }  // namespace UI
 

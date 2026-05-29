@@ -12,7 +12,7 @@ provide the runtime fonts and a single empty page; no objects, no events.
 
 ## 1. Create the HMI
 
-1. Open Nextion Editor → **File ▸ New** → save as `nixie_stopky.HMI`.
+1. Open Nextion Editor → **File ▸ New** → save as `lixie_stopky.HMI`.
 2. **Settings ▸ Device** → pick `NX4024T032_011` (Basic, 400×240, no touch
    layer disabled). Orientation: **Horizontal**.
 3. Page 0 — leave empty. Background colour: `4164` (matches `COL_BG`).

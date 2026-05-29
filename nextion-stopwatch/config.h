@@ -53,7 +53,7 @@
 // RSS feed for the rotating headline at the bottom of the idle screen.
 //   Swap freely. https URLs are supported (TLS via setInsecure()).
 #define NEWS_RSS_URL "https://www.aktuality.sk/rss/"
-#define WEATHER_REFRESH_MS  (10UL * 60UL * 1000UL)
+#define WEATHER_REFRESH_MS  (60UL * 60UL * 1000UL)   // 1 hour
 #define NEWS_REFRESH_MS     (15UL * 60UL * 1000UL)
 #define NEWS_ROTATE_MS      8000UL
 

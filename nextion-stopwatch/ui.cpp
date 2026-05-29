@@ -122,6 +122,35 @@ static uint32_t currentElapsedSec() {
 // ---------------------------------------------------------------------------
 // Drawing — header strip used on every non-idle screen
 // ---------------------------------------------------------------------------
+
+// Top-right home button: 40x32 orange tile with a white house glyph stitched
+// together from horizontal lines and rectangles, since the ASCII font has no
+// icon characters. Touch zone matches the visible tile exactly.
+static const int HOME_X = DISP_W - 44;
+static const int HOME_W = 40;
+static const int HOME_H = 32;
+
+static void drawHomeButton(int y) {
+    Nextion::fillRect(HOME_X, y, HOME_W, HOME_H, COL_ACCENT);
+    int cx = HOME_X + HOME_W / 2;
+
+    // Roof — filled triangle drawn as 8 horizontal lines, widening downwards.
+    for (int row = 0; row < 8; row++) {
+        int half = row * 2;
+        if (half > 14) half = 14;
+        Nextion::drawLine(cx - half, y + 6 + row,
+                          cx + half, y + 6 + row, COL_WHITE);
+    }
+    // Walls
+    Nextion::fillRect(cx - 11, y + 14, 22, 12, COL_WHITE);
+    // Door — knocked out in accent so it reads as a hole.
+    Nextion::fillRect(cx - 3,  y + 18,  6,  8, COL_ACCENT);
+}
+
+static bool inHomeButton(const NextionTouch& t, int y) {
+    return inRect(t, HOME_X, y, HOME_W, HOME_H);
+}
+
 static void drawHeader(const String& title, bool showBack) {
     Nextion::fillRect(0, 0, DISP_W, 40, COL_PANEL);
     Nextion::drawLine(0, 40, DISP_W, 40, COL_ACCENT);
@@ -129,8 +158,12 @@ static void drawHeader(const String& title, bool showBack) {
         Nextion::fillRect(8, 6, 64, 28, COL_BG);
         Nextion::drawTextCentered(8, 6, 64, 28, FONT_SMALL, COL_TEXT, COL_BG, "< Back");
     }
-    Nextion::drawTextSty(showBack ? 80 : 12, 6, DISP_W - (showBack ? 92 : 24), 28,
+    // Reserve the right edge for the home button (HOME_W + 8 padding).
+    int titleX = showBack ? 80 : 12;
+    int titleW = DISP_W - titleX - (HOME_W + 8);
+    Nextion::drawTextSty(titleX, 6, titleW, 28,
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 0, 1, 1, title);
+    drawHomeButton(4);
 }
 
 static void drawFooterHint(const String& s) {
@@ -246,9 +279,13 @@ static void drawIdle() {
     Nextion::drawTextCentered(60, 148, DISP_W - 120, 52,
                               FONT_LARGE, COL_BLACK, COL_ACCENT, "TAP TO START");
 
-    drawFooterHint(WiFi.status() == WL_CONNECTED
-                       ? "WiFi: " + WiFi.SSID() + "   " + WiFi.localIP().toString()
-                       : "WiFi: disconnected");
+    // Footer = today's date, in Slovak DD.MM.YYYY format.
+    time_t now = time(nullptr);
+    struct tm tm_local;
+    localtime_r(&now, &tm_local);
+    char dateBuf[16];
+    strftime(dateBuf, sizeof(dateBuf), "%d.%m.%Y", &tm_local);
+    drawFooterHint(String(dateBuf));
 }
 
 static void drawClientScreen() {
@@ -279,16 +316,18 @@ static void drawAppScreen() {
 static void drawRunningScreen() {
     Nextion::clear(COL_BG);
 
-    // Top context strip
+    // Top context strip (56 px tall — reserve right side for the home button).
     Nextion::fillRect(0, 0, DISP_W, 56, COL_PANEL);
     Nextion::drawLine(0, 56, DISP_W, 56, sSelClientColor);
-    Nextion::drawTextSty(8, 4, DISP_W - 16, 24,
+    int topTextW = DISP_W - 16 - (HOME_W + 8);
+    Nextion::drawTextSty(8, 4, topTextW, 24,
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 1, 1, 1,
                          sSelClientName);
-    Nextion::drawTextSty(8, 30, DISP_W - 16, 22,
+    Nextion::drawTextSty(8, 30, topTextW, 22,
                          FONT_SMALL, COL_MUTED, COL_PANEL, 1, 1, 1,
                          sSelProjectName + "   "
                              + (sSelApp >= 0 ? sSelAppName : String("(no app)")));
+    drawHomeButton(12);   // centred in the taller running-screen strip
 
     // Status
     Nextion::drawTextCentered(0, 66, DISP_W, 38,
@@ -351,19 +390,39 @@ static void drawToastScreen() {
 // ---------------------------------------------------------------------------
 // Touch handlers
 // ---------------------------------------------------------------------------
+static void goHome() {
+    LedDisplay::clockMode();
+    if (sScreen == SCR_RUNNING) {
+        // Running session is abandoned — make that visible.
+        toast("Discarded", 1200, SCR_IDLE);
+        return;
+    }
+    sSelApp = -1;
+    goTo(SCR_IDLE);
+}
+
 static void onScrollHit(int hit, int count, int& offset) {
     if (hit == -2 && offset > 0) { offset--; sDirty = true; }
     if (hit == -3 && offset + LIST_VISIBLE < count) { offset++; sDirty = true; }
 }
 
 static void onTouchIdle(const NextionTouch& t) {
+    // Hidden affordance: tapping the weather strip forces a refresh. No
+    // visible hint — the strip just updates if anything changed.
+    if (inRect(t, 20, 48, DISP_W - 40, 36)) {
+        Weather::refresh();
+        drawIdleWeather();
+        return;
+    }
+    // Anywhere else → start the selection workflow.
     goTo(SCR_CLIENT);
     sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
-    sClientOffset = 0;   // fresh fetch, jump to top
+    sClientOffset = 0;
     sDirty = true;
 }
 
 static void onTouchClient(const NextionTouch& t) {
+    if (inHomeButton(t, 4)) { goHome(); return; }
     int hit = listHit(t, sClientCount, sClientOffset);
     if (hit < 0) { onScrollHit(hit, sClientCount, sClientOffset); return; }
     Entity& c = sClients[hit];
@@ -376,6 +435,7 @@ static void onTouchClient(const NextionTouch& t) {
 }
 
 static void onTouchProject(const NextionTouch& t) {
+    if (inHomeButton(t, 4)) { goHome(); return; }
     if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CLIENT); return; }  // back keeps sClientOffset
     int hit = listHit(t, sProjectCount, sProjectOffset);
     if (hit < 0) { onScrollHit(hit, sProjectCount, sProjectOffset); return; }
@@ -402,6 +462,7 @@ static void startSession(int appId, const String& appName) {
 }
 
 static void onTouchApp(const NextionTouch& t) {
+    if (inHomeButton(t, 4)) { goHome(); return; }
     if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }  // back keeps sProjectOffset
     if (inRect(t, 12, DISP_H - 44, 120, 30)) { startSession(-1, "(no app)"); return; }
     int hit = listHit(t, sAppCount, sAppOffset);
@@ -428,6 +489,7 @@ static void togglePause() {
 }
 
 static void onTouchRunning(const NextionTouch& t) {
+    if (inHomeButton(t, 12)) { goHome(); return; }
     // Pause / Continue (left)
     if (inRect(t, 20, 162, 170, 58)) {
         togglePause();
@@ -443,6 +505,7 @@ static void onTouchRunning(const NextionTouch& t) {
 }
 
 static void onTouchConfirm(const NextionTouch& t) {
+    if (inHomeButton(t, 4)) { goHome(); return; }
     if (inRect(t, 28, 178, 156, 44)) {  // Discard
         // Flash "Discarded", then drop straight back to the app picker —
         // the client and project are almost always right, the app is the

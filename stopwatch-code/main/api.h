@@ -1,10 +1,8 @@
 #ifndef API_H
 #define API_H
 
-// Načíta 6 číslic z API (alebo z mock dát)
-bool fetchDigits(int digits[6]);
-
-// Odošle ukončenie session na server
-bool sendFinishedSession(int durationSeconds);
+void setupWiFiAndNTP();          // pripojenie na Wi-Fi a NTP
+bool fetchDigits(int digits[6]); // vráti 6 číslic (HH:MM:SS)
+bool sendFinishedSession(int durationSeconds); // POST na server
 
 #endif

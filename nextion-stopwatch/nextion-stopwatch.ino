@@ -20,25 +20,18 @@
 #include "weather.h"
 #include "news.h"
 #include "api.h"
+#include "wifimgr.h"
 
-static void connectWiFi() {
-    Serial.println("[wifi] connecting...");
-    UI::showBootMessage("Connecting to WiFi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    uint32_t t0 = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) {
-        delay(250);
-        Serial.print(".");
-    }
-    Serial.println();
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.print("[wifi] OK ip=");
-        Serial.println(WiFi.localIP());
-        UI::showBootMessage("WiFi OK: " + WiFi.localIP().toString());
-    } else {
-        Serial.println("[wifi] failed");
-        UI::showBootMessage("WiFi failed - offline mode");
+static void enterApSetupMode() {
+    UI::showBootMessage(String("WiFi setup mode\n")
+                        + "Join '" + AP_SSID + "'\n"
+                        + "then open 192.168.4.1");
+    Serial.println("[boot] AP setup loop");
+    // Stay here forever — the only escape is the user saving credentials,
+    // which calls ESP.restart() inside the captive portal handler.
+    while (true) {
+        WifiMgr::loop();
+        delay(5);
     }
 }
 
@@ -73,7 +66,12 @@ void setup() {
 
     UI::showBootMessage("Booting...");
 
-    connectWiFi();
+    UI::showBootMessage("Connecting to WiFi...");
+    if (!WifiMgr::begin()) {
+        // Saved + default credentials both failed → captive portal.
+        enterApSetupMode();   // never returns
+    }
+    UI::showBootMessage("WiFi OK: " + WiFi.localIP().toString());
     syncNtp();
 
     Serial.println("[feed] initial weather + news fetch...");

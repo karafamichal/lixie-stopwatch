@@ -31,9 +31,18 @@
 #define LED_COLON_RIGHT  29
 
 // WiFi / API
+// These are the *factory defaults* — they're tried only when no credentials
+// have been saved via the on-device web setup page yet. After the first
+// successful provisioning the saved (NVS) credentials take precedence.
 
 #define WIFI_SSID     "LagTop"
 #define WIFI_PASSWORD "LagTop123"
+
+// Soft-AP that comes up when the ESP32 can't connect to any known network.
+// Connect a phone to it, then browse to http://192.168.4.1 to configure.
+#define AP_SSID                 "LixieStopky-Setup"
+#define AP_PASSWORD             ""           // empty = open AP
+#define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
 // REST base URL — must end without trailing slash.
 #define API_BASE_URL  "http://193.87.172.155:5000/api/v1"

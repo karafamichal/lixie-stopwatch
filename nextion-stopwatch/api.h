@@ -29,6 +29,10 @@ int fetchApps(Entity* out, int max);
 bool postTimelog(int clientId, int projectId, int appId,
                  const String& start_ts, uint32_t duration_seconds);
 
+// POST /devices/heartbeat — keeps the dashboard's "Online" status truthful
+// in the gaps between time-log submissions.
+bool sendHeartbeat();
+
 }  // namespace Api
 
 #endif

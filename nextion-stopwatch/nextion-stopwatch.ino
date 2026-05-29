@@ -17,6 +17,7 @@
 #include "leddisplay.h"
 #include "weather.h"
 #include "news.h"
+#include "api.h"
 
 static void connectWiFi() {
     Serial.println("[wifi] connecting...");
@@ -80,6 +81,9 @@ void setup() {
     Serial.printf("[feed] weather=%s news=%d\n",
                   Weather::get().valid ? "ok" : "miss", News::count());
 
+    bool hb = Api::sendHeartbeat();
+    Serial.printf("[heartbeat] initial=%s\n", hb ? "ok" : "fail");
+
     Serial.println("[boot] entering idle");
     UI::goTo(UI::SCR_IDLE);
 }
@@ -102,6 +106,16 @@ static void refreshFeeds() {
     }
 }
 
+static void pulseHeartbeat() {
+    // Runs in every state — the dashboard cares about presence whether we're
+    // idle, browsing, or actively timing a session.
+    static uint32_t lastBeat = 0;
+    uint32_t now = millis();
+    if (now - lastBeat < 60000) return;
+    lastBeat = now;
+    Api::sendHeartbeat();
+}
+
 void loop() {
     NextionTouch t;
     while (Nextion::poll(t)) {
@@ -111,6 +125,7 @@ void loop() {
     UI::tick();
     LedDisplay::tick();
     refreshFeeds();
+    pulseHeartbeat();
 
     delay(20);
 }

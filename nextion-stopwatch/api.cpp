@@ -109,4 +109,18 @@ bool postTimelog(int clientId, int projectId, int appId,
     return code == 200 || code == 201;
 }
 
+bool sendHeartbeat() {
+    if (WiFi.status() != WL_CONNECTED) return false;
+
+    HTTPClient http;
+    http.setTimeout(3000);
+    if (!http.begin(String(API_BASE_URL) + "/devices/heartbeat")) return false;
+    http.addHeader("Content-Type", "application/json");
+
+    String body = String("{\"hardware_id\":\"") + HARDWARE_ID + "\"}";
+    int code = http.POST(body);
+    http.end();
+    return code >= 200 && code < 300;
+}
+
 }  // namespace Api

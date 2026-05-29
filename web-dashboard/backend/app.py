@@ -420,6 +420,24 @@ def create_app():
         devices = Device.query.order_by(Device.last_seen.desc()).all()
         return jsonify([d.to_dict() for d in devices])
 
+    @app.route('/api/v1/devices/heartbeat', methods=['POST'])
+    def device_heartbeat():
+        """Touch device.last_seen so the dashboard's 'Online' check stays
+        accurate between time-log submissions. Called by the ESP32 on a
+        60-second cadence; first call auto-registers the device.
+        """
+        data = request.get_json(silent=True) or {}
+        hw_id = (data.get('hardware_id') or '').strip()
+        if not hw_id:
+            abort(400, description="hardware_id required")
+        device = Device.query.filter_by(hardware_id=hw_id).first()
+        if not device:
+            device = Device(hardware_id=hw_id)
+            db.session.add(device)
+        device.last_seen = datetime.utcnow()
+        db.session.commit()
+        return '', 204
+
     @app.route('/api/v1/devices/<int:did>', methods=['PUT'])
     def update_device(did):
         device = db.get_or_404(Device, did)

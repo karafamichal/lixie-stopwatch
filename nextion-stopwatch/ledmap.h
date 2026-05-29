@@ -1,3 +1,10 @@
+// Low‑level direct control of the WS2812B strip.
+// Defines the leds[LED_NUM] array and functions:
+//   - showDigits() – lights up 6 digits with a given colour using a pre‑defined map
+//   - setColons(), setColonBlink() – colon control
+//   - updateColonBlink() – periodic 1 Hz blinking
+// ============================================================================
+
 #ifndef LEDMAP_H
 #define LEDMAP_H
 

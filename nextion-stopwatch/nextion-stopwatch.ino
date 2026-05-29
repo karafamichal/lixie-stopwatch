@@ -1,12 +1,14 @@
-// Nixie Stopky — Nextion NX4024T032 controller for ESP32-S3
-//
-// Hardware:
-//   ESP32-S3 GPIO19 -> Nextion RX
-//   ESP32-S3 GPIO20 <- Nextion TX
-//   Common 5 V and GND.
-//
-// Display required setup: see HMI_SETUP.md. The HMI must contain page 0,
-// four fonts (IDs 0..3), and have `sendxy=1` enabled.
+// Main program for the ESP32.
+// setup():
+//   - initialises the Nextion display, shows "Booting..."
+//   - initialises the LED matrix (LedDisplay::begin)
+//   - connects to WiFi, syncs time via NTP
+//   - switches to the main idle screen (SCR_IDLE)
+// loop():
+//   - collects touches from Nextion and forwards them to UI::handleTouch
+//   - calls UI::tick() and LedDisplay::tick() to refresh screen and matrix
+//   - short delay (20 ms)
+// ============================================================================
 
 #include <WiFi.h>
 #include <time.h>
@@ -60,7 +62,7 @@ void setup() {
     Serial.println("[boot] leds ok");
     Serial.flush();
 
-    Serial.println("[boot] init nextion (will reassign GPIO19/20)...");
+    Serial.println("[boot] init nextion (will reassign GPIO17/18)...");
     Serial.flush();
     Nextion::begin();
     Serial.println("[boot] nextion ok");

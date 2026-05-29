@@ -1,15 +1,17 @@
+// High‑level control of the Lixie matrix (6 digits + two colons).
+// Main modes:
+//   - clockMode() – shows wall‑clock time (HH:MM:SS) in nixie orange
+//   - startStopwatch() – starts a stopwatch, shows elapsed time in client colour
+//   - holdDuration() – freezes the stopwatch at a fixed time (confirm save)
+//   - tick() – call in loop(), updates the display according to the current mode
+// ============================================================================
+
 #ifndef LEDDISPLAY_H
 #define LEDDISPLAY_H
 
 #include <FastLED.h>
 #include <stdint.h>
 
-// High-level Lixie matrix driver:
-//   - When the device is idle / browsing menus, the matrix shows wall-clock
-//     time (HH:MM:SS) in Nixie orange.
-//   - When a session is running, the matrix shows the elapsed stopwatch time
-//     in the selected client's colour.
-//   - On the confirm screen, the matrix holds the final duration.
 namespace LedDisplay {
 
 void begin();
@@ -31,6 +33,6 @@ void blank();
 // manages the colon-blink animation.
 void tick();
 
-}  // namespace LedDisplay
+}
 
 #endif

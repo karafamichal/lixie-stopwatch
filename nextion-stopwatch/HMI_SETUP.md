@@ -62,8 +62,8 @@ NX4024T032 pin   ESP32-S3-N16R8
 ─────────────    ───────────────
 +5V              5V  (use a 5V/2A supply — the display alone draws ~250 mA)
 GND              GND
-TX (yellow)      GPIO18  (RX1)
-RX (blue)        GPIO17  (TX1)
+TX (yellow)      GPIO17  (RX1)
+RX (blue)        GPIO18  (TX1)
 ```
 
 > GPIO19/20 are reserved for native USB on the N16R8 — using them for UART

@@ -1,3 +1,10 @@
+// Implements the serial link to the Nextion.
+// Important:
+//   - at start, sends "bauds=115200" at 9600 baud, then switches to 115200
+//   - parses frames terminated by 0xFF 0xFF 0xFF, looks for type 0x67 (touch)
+//   - drawing functions send commands like "fill x,y,w,h,color" plus three 0xFF
+// ============================================================================
+
 #include "nextion.h"
 #include "config.h"
 #include <HardwareSerial.h>
@@ -118,9 +125,8 @@ bool poll(NextionTouch& out) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
 // Drawing
-// ---------------------------------------------------------------------------
+
 void clear(uint16_t color) {
     cmdf("cls %u", color);
 }

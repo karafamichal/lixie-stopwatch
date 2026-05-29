@@ -1,3 +1,10 @@
+// Implementation of REST API calls.
+//   - fetchClients(), fetchProjects(), fetchApps() use HTTP GET
+//     and parse JSON responses into Entity arrays.
+//   - postTimelog() sends the measured duration to the server.
+// On error (no WiFi, bad JSON, timeout) they return -1 or false.
+// ============================================================================
+
 #include "api.h"
 #include "config.h"
 #include <WiFi.h>

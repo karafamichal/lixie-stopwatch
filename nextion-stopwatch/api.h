@@ -1,3 +1,8 @@
+// Header for server communication.
+// Defines the Entity structure (id, name, color, extra info) and
+// functions to fetch lists (clients, projects, apps) and post a timelog.
+// ============================================================================
+
 #ifndef API_H
 #define API_H
 

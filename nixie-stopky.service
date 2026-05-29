@@ -8,7 +8,8 @@ User=nixie
 Group=nixie
 WorkingDirectory=/opt/nixie-stopky/backend
 ExecStart=/opt/nixie-stopky/venv/bin/gunicorn \
-    --workers 2 \
+    --worker-class gevent \
+    --workers 1 \
     --bind 0.0.0.0:5000 \
     --timeout 60 \
     --access-logfile /var/log/nixie-stopky/access.log \

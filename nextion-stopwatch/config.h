@@ -41,7 +41,6 @@
 
 // REST base URL — must end without trailing slash.
 #define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
-#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
 #define HARDWARE_ID   "esp32_lixie_001"

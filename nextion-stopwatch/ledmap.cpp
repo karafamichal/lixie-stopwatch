@@ -12,11 +12,11 @@ CRGB leds[LED_NUM];
 // matrix — adjust per board if a particular segment is dark.
 static const uint8_t ledIndex[6][10] = {
     //matrix1 deiatky hodin
-    { 9,  0,  8,  1,  7,  2,  6,  3,  5,  4},
+    { 4, 3, 5, 6, 14, 13, 15, 16, 24, 23},
     //matrix1 jednotky hodin
-    {19, 10, 18, 11, 17, 12, 16, 13, 15, 14},
+    {1, 0, 8, 9, 11, 10, 18, 19, 21, 20},
     //matrix2 deiatky minut
-    {31, 25, 33, 26, 32, 27, 31, 28, 30, 29},
+    {},
     //matrix2 jednotky minut
     {44, 35, 43, 36, 42, 37, 41, 38, 46, 39},
     //matrix3 desiatky sekund

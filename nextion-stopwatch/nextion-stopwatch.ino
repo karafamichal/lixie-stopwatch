@@ -9,15 +9,6 @@
 //   - calls UI::tick() and LedDisplay::tick() to refresh screen and matrix
 //   - short delay (20 ms)
 // ============================================================================
-// Lixie Stopky — Nextion NX4024T032 controller for ESP32-S3
-//
-// Hardware:
-//   ESP32-S3 GPIO18 -> Nextion RX
-//   ESP32-S3 GPIO17 <- Nextion TX
-//   Common 5 V and GND.
-//
-// Display required setup: see HMI_SETUP.md. The HMI must contain page 0,
-// four fonts (IDs 0..3), and have `sendxy=1` enabled.
 
 #include <WiFi.h>
 #include <time.h>

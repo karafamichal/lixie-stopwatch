@@ -26,10 +26,7 @@ static void writeTerminator() {
 namespace Nextion {
 
 void begin() {
-    // The Nextion boots its uploaded HMI immediately on power-up and may run a
-    // built-in splash/animation in the meantime. We bring up UART at 9600 (its
-    // factory default), persist the faster baud, then re-attach at 115200 and
-    // hammer the display into a known blank state.
+
     NexSerial.begin(NEXTION_DEFAULT_BAUD, SERIAL_8N1, NEXTION_RX_PIN, NEXTION_TX_PIN);
     delay(100);
     NexSerial.print("bauds=");
@@ -90,9 +87,6 @@ String escape(const String& s) {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Touch / event parsing
-// ---------------------------------------------------------------------------
 bool poll(NextionTouch& out) {
     while (NexSerial.available()) {
         uint8_t b = NexSerial.read();

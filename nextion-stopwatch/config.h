@@ -27,8 +27,8 @@
 #define LED_PIN          5
 #define LED_NUM          70
 #define LED_BRIGHTNESS   60          // 0..255 — keep modest for current draw
-#define LED_COLON_LEFT   22
-#define LED_COLON_RIGHT  47
+#define LED_COLON_LEFT   25
+#define LED_COLON_RIGHT  29
 
 // WiFi / API
 

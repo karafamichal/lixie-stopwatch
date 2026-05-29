@@ -110,15 +110,27 @@ bool postTimelog(int clientId, int projectId, int appId,
 }
 
 bool sendHeartbeat() {
-    if (WiFi.status() != WL_CONNECTED) return false;
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[heartbeat] no WiFi");
+        return false;
+    }
 
     HTTPClient http;
     http.setTimeout(3000);
-    if (!http.begin(String(API_BASE_URL) + "/devices/heartbeat")) return false;
+    String url = String(API_BASE_URL) + "/devices/heartbeat";
+    if (!http.begin(url)) {
+        Serial.println("[heartbeat] begin() failed");
+        return false;
+    }
     http.addHeader("Content-Type", "application/json");
 
     String body = String("{\"hardware_id\":\"") + HARDWARE_ID + "\"}";
     int code = http.POST(body);
+    if (code < 200 || code >= 300) {
+        String resp = http.getString();
+        Serial.printf("[heartbeat] HTTP %d body=%s\n",
+                      code, resp.substring(0, 120).c_str());
+    }
     http.end();
     return code >= 200 && code < 300;
 }

@@ -22,6 +22,7 @@ enum Screen {
     SCR_APP,
     SCR_RUNNING,
     SCR_CONFIRM,
+    SCR_DISCARD_CONFIRM,
     SCR_TOAST
 };
 

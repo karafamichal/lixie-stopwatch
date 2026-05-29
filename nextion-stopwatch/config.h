@@ -5,11 +5,15 @@
 // Hardware pins
 // ============================================================================
 // Nextion NX4024T032 connects to ESP32-S3 via UART1.
-//   ESP32 GPIO19 (TX1)  --->  Nextion RX
-//   ESP32 GPIO20 (RX1)  <---  Nextion TX
+//   ESP32 GPIO17 (TX1)  --->  Nextion RX (blue)
+//   ESP32 GPIO18 (RX1)  <---  Nextion TX (yellow)
 //   5V and GND share with the display.
-#define NEXTION_TX_PIN   19
-#define NEXTION_RX_PIN   20
+//
+// We avoid GPIO19/20 because on the N16R8 they're hard-wired to USB D-/D+;
+// reassigning them kills native USB-CDC and the serial console goes dark
+// mid-boot.
+#define NEXTION_TX_PIN   17
+#define NEXTION_RX_PIN   18
 #define NEXTION_UART_NUM 1
 #define NEXTION_BAUD     115200   // target speed after bootstrap
 #define NEXTION_DEFAULT_BAUD 9600 // Nextion factory default
@@ -22,7 +26,7 @@
 // WS2812B Lixie matrix
 // ============================================================================
 // 6 digit matrices (10 LEDs each) + 2 colon LEDs = 62 LEDs total.
-// Wired as a single chain on GPIO5 (avoid the UART pins 19/20).
+// Wired as a single chain on GPIO5.
 #define LED_PIN          5
 #define LED_NUM          62
 #define LED_BRIGHTNESS   60          // 0..255 — keep modest for current draw
@@ -32,11 +36,11 @@
 // ============================================================================
 // WiFi / API
 // ============================================================================
-#define WIFI_SSID     "YOUR_SSID"
-#define WIFI_PASSWORD "YOUR_PASSWORD"
+#define WIFI_SSID     "LagTop"
+#define WIFI_PASSWORD "LagTop123"
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://192.168.1.100:5000/api/v1"
+#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
 #define HARDWARE_ID   "esp32_lixie_001"

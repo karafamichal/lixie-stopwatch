@@ -17,29 +17,36 @@
 #include "leddisplay.h"
 
 static void connectWiFi() {
+    Serial.println("[wifi] connecting...");
     UI::showBootMessage("Connecting to WiFi...");
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     uint32_t t0 = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) {
         delay(250);
+        Serial.print(".");
     }
+    Serial.println();
     if (WiFi.status() == WL_CONNECTED) {
+        Serial.print("[wifi] OK ip=");
+        Serial.println(WiFi.localIP());
         UI::showBootMessage("WiFi OK: " + WiFi.localIP().toString());
     } else {
+        Serial.println("[wifi] failed");
         UI::showBootMessage("WiFi failed - offline mode");
     }
 }
 
 static void syncNtp() {
+    Serial.println("[ntp] sync...");
     UI::showBootMessage("Syncing time (NTP)...");
     configTzTime(TZ_STRING, NTP_SERVER_1, NTP_SERVER_2);
-    // Wait briefly for the first sync; the OS keeps refreshing in background.
     uint32_t t0 = millis();
     time_t now = 0;
     while ((now = time(nullptr)) < 100000 && millis() - t0 < 8000) {
         delay(200);
     }
+    Serial.printf("[ntp] %s\n", now > 100000 ? "synced" : "timeout");
 }
 
 void setup() {
@@ -47,14 +54,24 @@ void setup() {
     delay(50);
     Serial.println("\n=== Nixie Stopky — Nextion edition ===");
 
-    Nextion::begin();
-    UI::showBootMessage("Booting...");
+    Serial.println("[boot] init leds...");
+    Serial.flush();
+    LedDisplay::begin();
+    Serial.println("[boot] leds ok");
+    Serial.flush();
 
-    LedDisplay::begin();   // matrices show 00:00:00 until NTP lands
+    Serial.println("[boot] init nextion (will reassign GPIO19/20)...");
+    Serial.flush();
+    Nextion::begin();
+    Serial.println("[boot] nextion ok");
+    Serial.flush();
+
+    UI::showBootMessage("Booting...");
 
     connectWiFi();
     syncNtp();
 
+    Serial.println("[boot] entering idle");
     UI::goTo(UI::SCR_IDLE);
 }
 

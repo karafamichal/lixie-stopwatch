@@ -55,16 +55,19 @@ touch coordinates (`0x67 X Y ev FF FF FF`), which the firmware parses in
    flashes the firmware automatically.
 3. Eject the card and reboot the display.
 
-## 5. Wiring to ESP32-S3
+## 5. Wiring to ESP32-S3 (N16R8)
 
 ```
-NX4024T032 pin   ESP32-S3
-─────────────    ─────────
-+5V              5V (use a 5V/2A supply — the display alone draws ~250 mA)
+NX4024T032 pin   ESP32-S3-N16R8
+─────────────    ───────────────
++5V              5V  (use a 5V/2A supply — the display alone draws ~250 mA)
 GND              GND
-TX (yellow)      GPIO20  (RX1)
-RX (blue)        GPIO19  (TX1)
+TX (yellow)      GPIO18  (RX1)
+RX (blue)        GPIO17  (TX1)
 ```
+
+> GPIO19/20 are reserved for native USB on the N16R8 — using them for UART
+> kills the USB-CDC serial console. GPIO17/18 are free general-purpose pins.
 
 Power both from the same 5V rail and tie the grounds together. If the display
 brown-outs on backlight wake, add a 470 µF cap across its 5V/GND pins.

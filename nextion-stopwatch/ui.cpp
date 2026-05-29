@@ -59,6 +59,7 @@ static int      sIdleNewsIdx        = 0;
 // Toast
 static String   sToastMsg;
 static uint32_t sToastUntil = 0;
+static Screen   sToastNext  = SCR_IDLE;
 
 static CRGB rgb565ToCrgb(uint16_t c) {
     uint8_t r = (c >> 11) & 0x1F;
@@ -443,8 +444,11 @@ static void onTouchRunning(const NextionTouch& t) {
 
 static void onTouchConfirm(const NextionTouch& t) {
     if (inRect(t, 28, 178, 156, 44)) {  // Discard
+        // Flash "Discarded", then drop straight back to the app picker —
+        // the client and project are almost always right, the app is the
+        // easy thing to misclick.
         LedDisplay::clockMode();
-        toast("Discarded");
+        toast("Discarded", 1500, SCR_APP);
         return;
     }
     if (inRect(t, DISP_W - 184, 178, 156, 44)) {  // Save
@@ -476,17 +480,18 @@ void goTo(Screen s) {
 
 Screen current() { return sScreen; }
 
-void toast(const String& message, uint16_t ms) {
-    sToastMsg = message;
+void toast(const String& message, uint16_t ms, Screen nextScreen) {
+    sToastMsg   = message;
     sToastUntil = millis() + ms;
+    sToastNext  = nextScreen;
     goTo(SCR_TOAST);
 }
 
 void tick() {
     // Toast auto-dismiss
     if (sScreen == SCR_TOAST && millis() >= sToastUntil) {
-        sSelApp = -1;
-        goTo(SCR_IDLE);
+        if (sToastNext == SCR_IDLE) sSelApp = -1;
+        goTo(sToastNext);
     }
 
     if (sDirty) {

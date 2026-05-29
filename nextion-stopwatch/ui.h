@@ -1,3 +1,12 @@
+// Header for the user interface – screens (SCR_IDLE, SCR_CLIENT...).
+// Functions:
+//   - showBootMessage() – boot‑time status text
+//   - goTo() – switch between screens
+//   - tick() – redraws current screen if marked dirty
+//   - handleTouch() – dispatches touches based on the current screen
+//   - toast() – short message (e.g. "Saved!")
+// ============================================================================
+
 #ifndef UI_H
 #define UI_H
 

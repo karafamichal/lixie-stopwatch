@@ -1,3 +1,10 @@
+// Implements the serial link to the Nextion.
+// Important:
+//   - at start, sends "bauds=115200" at 9600 baud, then switches to 115200
+//   - parses frames terminated by 0xFF 0xFF 0xFF, looks for type 0x67 (touch)
+//   - drawing functions send commands like "fill x,y,w,h,color" plus three 0xFF
+// ============================================================================
+
 #include "nextion.h"
 #include "config.h"
 #include <HardwareSerial.h>
@@ -19,10 +26,7 @@ static void writeTerminator() {
 namespace Nextion {
 
 void begin() {
-    // The Nextion boots its uploaded HMI immediately on power-up and may run a
-    // built-in splash/animation in the meantime. We bring up UART at 9600 (its
-    // factory default), persist the faster baud, then re-attach at 115200 and
-    // hammer the display into a known blank state.
+
     NexSerial.begin(NEXTION_DEFAULT_BAUD, SERIAL_8N1, NEXTION_RX_PIN, NEXTION_TX_PIN);
     delay(100);
     NexSerial.print("bauds=");
@@ -83,9 +87,6 @@ String escape(const String& s) {
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Touch / event parsing
-// ---------------------------------------------------------------------------
 bool poll(NextionTouch& out) {
     while (NexSerial.available()) {
         uint8_t b = NexSerial.read();
@@ -118,9 +119,8 @@ bool poll(NextionTouch& out) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
 // Drawing
-// ---------------------------------------------------------------------------
+
 void clear(uint16_t color) {
     cmdf("cls %u", color);
 }

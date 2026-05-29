@@ -1,3 +1,13 @@
+// All the user interface logic.
+// Contains:
+//   - drawing of each screen (drawIdle, drawClientScreen...)
+//   - touch handlers (onTouchClient, onTouchProject...)
+//   - calls to Api functions to fetch clients/projects/apps
+//   - control of the LED matrix (LedDisplay::startStopwatch, holdDuration...)
+//   - posting timelogs (Api::postTimelog)
+// This is the largest file – it connects the display, API and LED matrix.
+// ============================================================================
+
 #include "ui.h"
 #include "api.h"
 #include "config.h"

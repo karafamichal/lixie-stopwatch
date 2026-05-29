@@ -1,3 +1,10 @@
+// Implements the display logic.
+// Keeps track of the current mode (CLOCK, STOPWATCH, HOLD, BLANK).
+// In CLOCK mode it reads system time via time(nullptr) and splits into hours/
+// minutes/seconds. In STOPWATCH it computes the difference from sStartMs.
+// Calls low‑level functions from ledmap.cpp to light up individual LEDs.
+// ============================================================================
+
 #include "leddisplay.h"
 #include "ledmap.h"
 #include <time.h>
@@ -21,7 +28,7 @@ static void pushTime(uint32_t totalSec) {
 
 void begin() {
     initLeds();
-    setColonBlink(true, 1000);   // colons blink at 1 Hz like a real Lixie clock
+    setColonBlink(true, 1000);
     sMode = MODE_CLOCK;
     sLastSec = 0xFFFFFFFF;
 }
@@ -87,4 +94,4 @@ void tick() {
     }
 }
 
-}  // namespace LedDisplay
+}

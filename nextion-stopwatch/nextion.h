@@ -1,3 +1,11 @@
+// Communication with the Nextion touch display (NX4024T032).
+// Provides:
+//   - begin() – UART setup, baud rate change, disable auto‑responses
+//   - poll() – read touch events (raw coordinates)
+//   - drawing functions (fillRect, drawText, drawLine...)
+//   - cmd() / cmdf() – send raw commands to the display.
+// ============================================================================
+
 #ifndef NEXTION_H
 #define NEXTION_H
 

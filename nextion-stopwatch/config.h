@@ -1,19 +1,19 @@
+// This file is the single place where you configure:
+//   - which ESP32 pins are connected to the Nextion display and LED strip
+//   - WiFi SSID and password
+//   - server address (API)
+//   - colors, font sizes, NTP servers, etc.
+// Anyone wiring up the hardware must edit WIFI_SSID, WIFI_PASSWORD,
+// API_BASE_URL and HARDWARE_ID.
+// ============================================================================
+
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ============================================================================
 // Hardware pins
-// ============================================================================
-// Nextion NX4024T032 connects to ESP32-S3 via UART1.
-//   ESP32 GPIO17 (TX1)  --->  Nextion RX (blue)
-//   ESP32 GPIO18 (RX1)  <---  Nextion TX (yellow)
-//   5V and GND share with the display.
-//
-// We avoid GPIO19/20 because on the N16R8 they're hard-wired to USB D-/D+;
-// reassigning them kills native USB-CDC and the serial console goes dark
-// mid-boot.
-#define NEXTION_TX_PIN   17
-#define NEXTION_RX_PIN   18
+
+#define NEXTION_TX_PIN   17         //display
+#define NEXTION_RX_PIN   18         //display
 #define NEXTION_UART_NUM 1
 #define NEXTION_BAUD     115200   // target speed after bootstrap
 #define NEXTION_DEFAULT_BAUD 9600 // Nextion factory default
@@ -22,20 +22,16 @@
 #define DISP_W  400
 #define DISP_H  240
 
-// ============================================================================
-// WS2812B Lixie matrix
-// ============================================================================
 // 6 digit matrices (10 LEDs each) + 2 colon LEDs = 62 LEDs total.
 // Wired as a single chain on GPIO5.
 #define LED_PIN          5
-#define LED_NUM          62
+#define LED_NUM          70
 #define LED_BRIGHTNESS   60          // 0..255 — keep modest for current draw
-#define LED_COLON_LEFT   60
-#define LED_COLON_RIGHT  61
+#define LED_COLON_LEFT   25
+#define LED_COLON_RIGHT  29
 
-// ============================================================================
 // WiFi / API
-// ============================================================================
+
 #define WIFI_SSID     "LagTop"
 #define WIFI_PASSWORD "LagTop123"
 
@@ -73,10 +69,8 @@
 // hour AHEAD of UTC" (i.e. UTC+1). DST switches last Sun of Mar / last Sun of Oct.
 #define TZ_STRING     "CET-1CEST,M3.5.0,M10.5.0/3"
 
-// ============================================================================
 // UI
-// ============================================================================
-// Nextion font IDs — see HMI_SETUP.md. The HMI must include these four fonts.
+
 #define FONT_SMALL    0   // ~16 px
 #define FONT_MEDIUM   1   // ~24 px
 #define FONT_LARGE    2   // ~40 px

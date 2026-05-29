@@ -45,6 +45,24 @@ void handleTouch(const NextionTouch& t);
 // transitions to `nextScreen` (defaults to SCR_IDLE).
 void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_IDLE);
 
+// Snapshot of what the device is doing right now — published over WebSocket
+// to the dashboard so multiple users can watch live sessions.
+struct LiveSnapshot {
+    const char* state;            // "idle"|"selecting"|"running"|"paused"|"confirm"
+    int      clientId;            // -1 if none
+    String   clientName;
+    String   clientColor;         // "#RRGGBB", empty if none
+    int      projectId;           // -1 if none
+    String   projectName;
+    int      appId;               // -1 if none
+    String   appName;
+    String   startIso;            // empty if no active session
+    uint32_t elapsedSec;          // 0 if not running/paused
+    bool     paused;
+};
+
+LiveSnapshot getLiveSnapshot();
+
 }  // namespace UI
 
 #endif

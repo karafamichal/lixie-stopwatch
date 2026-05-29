@@ -1,6 +1,6 @@
 // Preset palette tuned for WS2812B LED visibility
 const PRESETS = [
-  { hex: '#FF8000', label: 'Nixie orange' },
+  { hex: '#FF8000', label: 'Lixie orange' },
   { hex: '#FF3000', label: 'Red-orange' },
   { hex: '#FF0000', label: 'Red' },
   { hex: '#FFD700', label: 'Gold' },

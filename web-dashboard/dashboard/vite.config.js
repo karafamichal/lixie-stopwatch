@@ -8,6 +8,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
+        ws: true,        // forward WebSocket upgrade for /api/v1/ws
       },
     },
   },

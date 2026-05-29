@@ -1,6 +1,6 @@
 // High‑level control of the Lixie matrix (6 digits + two colons).
 // Main modes:
-//   - clockMode() – shows wall‑clock time (HH:MM:SS) in nixie orange
+//   - clockMode() – shows wall‑clock time (HH:MM:SS) in Lixie orange
 //   - startStopwatch() – starts a stopwatch, shows elapsed time in client colour
 //   - holdDuration() – freezes the stopwatch at a fixed time (confirm save)
 //   - tick() – call in loop(), updates the display according to the current mode

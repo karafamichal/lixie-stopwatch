@@ -42,7 +42,7 @@ static const int ROW_H = 44;
 static const int ROW_X = 12, ROW_Y0 = 52, ROW_W = 376;
 
 // Current selection
-static int sSelClient  = -1;   static String sSelClientName;
+static int sSelClient  = -1;   static String sSelClientName; static String sSelClientHex;
 static int sSelProject = -1;   static String sSelProjectName;
 static int sSelApp     = -1;   static String sSelAppName;
 static uint16_t sSelClientColor = COL_ACCENT;
@@ -507,6 +507,7 @@ static void onTouchClient(const NextionTouch& t) {
     Entity& c = sClients[hit];
     sSelClient      = c.id;
     sSelClientName  = c.name;
+    sSelClientHex   = c.color;
     sSelClientColor = hexToRgb565(c.color);
     sProjectCount   = Api::fetchProjects(c.id, sProjects, MAX_ENTITIES);
     sProjectOffset  = 0;  // new project list for a new client
@@ -680,6 +681,41 @@ void handleTouch(const NextionTouch& t) {
         case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
         default: break;
     }
+}
+
+LiveSnapshot getLiveSnapshot() {
+    LiveSnapshot s;
+
+    switch (sScreen) {
+        case SCR_IDLE:            s.state = "idle";       break;
+        case SCR_CLIENT:
+        case SCR_PROJECT:
+        case SCR_APP:             s.state = "selecting";  break;
+        case SCR_RUNNING:         s.state = sPaused ? "paused" : "running"; break;
+        case SCR_CONFIRM:         s.state = "confirm";    break;
+        case SCR_DISCARD_CONFIRM: s.state = "running";    break;   // session still alive
+        case SCR_TOAST:           s.state = "idle";       break;
+        case SCR_BOOT:            s.state = "boot";       break;
+    }
+
+    s.clientId    = sSelClient;
+    s.clientName  = sSelClientName;
+    s.clientColor = sSelClientHex;
+    s.projectId   = sSelProject;
+    s.projectName = sSelProjectName;
+    s.appId       = sSelApp;
+    s.appName     = sSelAppName;
+    s.startIso    = sStartIso;
+    s.paused      = sPaused;
+
+    if (sScreen == SCR_RUNNING || sScreen == SCR_DISCARD_CONFIRM) {
+        s.elapsedSec = currentElapsedSec();
+    } else if (sScreen == SCR_CONFIRM) {
+        s.elapsedSec = sLastTimerSec;
+    } else {
+        s.elapsedSec = 0;
+    }
+    return s;
 }
 
 }  // namespace UI

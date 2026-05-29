@@ -47,6 +47,11 @@
 // REST base URL — must end without trailing slash.
 #define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
 
+// Live WebSocket channel. Host / port / path are the same server as the API.
+#define WS_HOST       "193.87.172.155"
+#define WS_PORT       5000
+#define WS_PATH       "/api/v1/ws"
+
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
 #define HARDWARE_ID   "esp32_lixie_001"
 

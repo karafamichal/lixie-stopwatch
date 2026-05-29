@@ -8,6 +8,7 @@ import * as api from '../api';
 import Modal from '../components/Modal';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
+import LiveSessions from '../components/LiveSessions';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,9 @@ export default function Homepage() {
         <div className="absolute -top-8 -right-8 w-48 h-48 rounded-full bg-amber-400/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-8 -left-4 w-36 h-36 rounded-full bg-orange-600/20 blur-2xl pointer-events-none" />
       </div>
+
+      {/* ── live sessions (only renders when something is happening) ──────── */}
+      <LiveSessions />
 
       {/* ── time summaries ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 mb-6">

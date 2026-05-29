@@ -1,9 +1,39 @@
 import os
+import json
+import threading
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory, abort
 from flask_cors import CORS
+from flask_sock import Sock
 from sqlalchemy import text, inspect as sa_inspect
 from models import db, Client, Project, App, Device, TimeLog, BUILTIN_APPS
+
+
+# ─── Real-time hub ───────────────────────────────────────────────────────────
+# In-memory: snapshot of every device's current state + the set of dashboards
+# subscribed to live updates. Single-worker deployment assumed (see README /
+# service file). For multi-worker scaling, swap this for a Redis pub/sub.
+_live_lock = threading.Lock()
+_live_states = {}        # hardware_id -> last state dict
+_live_subscribers = set()  # subscriber WebSocket handles (dashboards)
+
+
+def _broadcast(payload: str):
+    """Send a serialized JSON string to every dashboard subscriber.
+    Dead sockets are silently dropped from the set.
+    """
+    dead = []
+    with _live_lock:
+        targets = list(_live_subscribers)
+    for ws in targets:
+        try:
+            ws.send(payload)
+        except Exception:
+            dead.append(ws)
+    if dead:
+        with _live_lock:
+            for d in dead:
+                _live_subscribers.discard(d)
 
 
 def _migrate(app):
@@ -89,6 +119,7 @@ def create_app():
 
     CORS(app, resources={r'/api/*': {'origins': '*'}})
     db.init_app(app)
+    sock = Sock(app)
 
     with app.app_context():
         os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
@@ -577,6 +608,80 @@ def create_app():
             }
             for r in rows
         ])
+
+    # ── Live state (REST snapshot + WebSocket stream) ────────────────────────
+
+    @app.route('/api/v1/live', methods=['GET'])
+    def live_snapshot():
+        """Plain HTTP snapshot of every device's current state. Useful for
+        cold-start renders on the dashboard before its WS connection lands.
+        """
+        with _live_lock:
+            return jsonify(list(_live_states.values()))
+
+    @sock.route('/api/v1/ws')
+    def ws_handler(ws):
+        """Bidirectional channel.
+
+        Devices push:
+            { "type": "state", "hardware_id": "...", ...all-fields... }
+        Dashboards push once on connect:
+            { "type": "subscribe" }
+
+        Server pushes to dashboards:
+            { "type": "device_state", ...same shape as device push... }
+        """
+        role = None
+        try:
+            while True:
+                raw = ws.receive(timeout=120)
+                if raw is None:
+                    break
+                try:
+                    msg = json.loads(raw)
+                except Exception:
+                    continue
+
+                mtype = msg.get('type')
+
+                if mtype == 'state':
+                    hw_id = (msg.get('hardware_id') or '').strip()
+                    if not hw_id:
+                        continue
+                    role = 'device'
+                    msg['received_at'] = datetime.utcnow().isoformat() + 'Z'
+                    msg['type'] = 'device_state'
+                    with _live_lock:
+                        _live_states[hw_id] = msg
+                    # Keep the existing "Online" indicator working — same
+                    # last_seen field the dashboard polls.
+                    device = Device.query.filter_by(hardware_id=hw_id).first()
+                    if not device:
+                        device = Device(hardware_id=hw_id)
+                        db.session.add(device)
+                    device.last_seen = datetime.utcnow()
+                    try:
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                    _broadcast(json.dumps(msg))
+
+                elif mtype == 'subscribe':
+                    role = 'subscriber'
+                    with _live_lock:
+                        _live_subscribers.add(ws)
+                        snapshot = list(_live_states.values())
+                    # Replay current snapshot so the new client has every
+                    # active device immediately.
+                    for s in snapshot:
+                        try:
+                            ws.send(json.dumps(s))
+                        except Exception:
+                            break
+        finally:
+            if role == 'subscriber':
+                with _live_lock:
+                    _live_subscribers.discard(ws)
 
     # ── SPA fallback ──────────────────────────────────────────────────────────
 

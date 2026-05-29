@@ -59,8 +59,9 @@
 #define WEATHER_FALLBACK_LAT  48.1486f
 #define WEATHER_FALLBACK_LON  17.1077f
 
+// ============================================================================
 // NTP
-
+// ============================================================================
 #define NTP_SERVER_1  "pool.ntp.org"
 #define NTP_SERVER_2  "time.google.com"
 // Europe/Bratislava — CET (UTC+1 winter) / CEST (UTC+2 summer DST).

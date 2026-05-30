@@ -13,6 +13,9 @@
 
 extern CRGB leds[LED_NUM];
 
+// Live brightness update. Calls FastLED.setBrightness and re-shows the buffer.
+void setLedBrightness(uint8_t b);
+
 void initLeds();
 void clearAll();
 

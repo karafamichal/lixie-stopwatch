@@ -28,9 +28,11 @@ export const timelogs = {
 };
 
 export const devices = {
-  list: () => http.get('/devices').then(r => r.data),
-  update: (id, data) => http.put(`/devices/${id}`, data).then(r => r.data),
-  remove: (id) => http.delete(`/devices/${id}`),
+  list:        ()           => http.get('/devices').then(r => r.data),
+  update:      (id, data)   => http.put(`/devices/${id}`, data).then(r => r.data),
+  remove:      (id)         => http.delete(`/devices/${id}`),
+  getSettings: (id)         => http.get(`/devices/${id}/settings`).then(r => r.data),
+  setSettings: (id, data)   => http.put(`/devices/${id}/settings`, data).then(r => r.data),
 };
 
 export const apps = {

@@ -1,8 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { Pencil, Trash2, Wifi, WifiOff, Palette } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ColorPicker from '../components/ColorPicker';
+
+const BRIGHTNESS_LEVELS = [
+  { label: 'Low',  value: 30  },
+  { label: 'Med',  value: 80  },
+  { label: 'High', value: 150 },
+  { label: 'Max',  value: 250 },
+];
+
+function findBrightnessIdx(v) {
+  if (v == null) return 3;
+  for (let i = 0; i < BRIGHTNESS_LEVELS.length; i++) {
+    if (v <= BRIGHTNESS_LEVELS[i].value) return i;
+  }
+  return BRIGHTNESS_LEVELS.length - 1;
+}
 
 function isOnline(lastSeen) {
   if (!lastSeen) return false;
@@ -10,11 +26,18 @@ function isOnline(lastSeen) {
 }
 
 export default function Devices() {
-  const [devices, setDevices] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editTarget, setEditTarget] = useState(null);
-  const [label, setLabel] = useState('');
+  const [devices,      setDevices]      = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [editTarget,   setEditTarget]   = useState(null);
+  const [label,        setLabel]        = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Matrix settings editor
+  const [settingsTarget, setSettingsTarget] = useState(null);
+  const [settingsColor,  setSettingsColor]  = useState('#FF8000');
+  const [settingsBright, setSettingsBright] = useState(150);
+  const [settingsBusy,   setSettingsBusy]   = useState(false);
+  const [settingsFlash,  setSettingsFlash]  = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -38,6 +61,41 @@ export default function Devices() {
     await api.devices.remove(deleteTarget.id);
     setDeleteTarget(null);
     load();
+  };
+
+  const openSettings = async (d) => {
+    setSettingsTarget(d);
+    setSettingsFlash('');
+    setSettingsBusy(true);
+    try {
+      const s = await api.devices.getSettings(d.id);
+      setSettingsColor (s.color      || '#FF8000');
+      setSettingsBright(s.brightness != null ? s.brightness : 150);
+    } catch {
+      setSettingsColor('#FF8000');
+      setSettingsBright(150);
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsBusy(true);
+    setSettingsFlash('');
+    try {
+      const res = await api.devices.setSettings(settingsTarget.id, {
+        color:      settingsColor,
+        brightness: settingsBright,
+      });
+      setSettingsFlash(res.delivered
+        ? 'Sent to device.'
+        : 'Saved — device is offline, will apply on next connect.');
+      setTimeout(() => setSettingsTarget(null), 1100);
+    } catch (e) {
+      setSettingsFlash(e.response?.data?.error || 'Failed to save');
+    } finally {
+      setSettingsBusy(false);
+    }
   };
 
   return (
@@ -83,6 +141,9 @@ export default function Devices() {
                   </td>
                   <td className="td">
                     <div className="flex justify-end gap-1">
+                      <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
+                        <Palette className="w-4 h-4" />
+                      </button>
                       <button className="icon-btn" title="Edit label" onClick={() => openEdit(d)}>
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -125,6 +186,59 @@ export default function Devices() {
         title="Delete Device"
         message={`Remove device "${deleteTarget?.hardware_id}"? Time logs from this device are kept.`}
       />
+
+      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title="Matrix Settings" size="sm">
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500 font-mono">
+            {settingsTarget?.hardware_id}
+          </p>
+
+          <div>
+            <p className="label mb-2">Clock colour</p>
+            <ColorPicker value={settingsColor} onChange={setSettingsColor} />
+          </div>
+
+          <div>
+            <p className="label mb-2">Brightness</p>
+            <div className="grid grid-cols-4 gap-2">
+              {BRIGHTNESS_LEVELS.map((b, i) => {
+                const active = findBrightnessIdx(settingsBright) === i;
+                return (
+                  <button
+                    key={b.value}
+                    type="button"
+                    onClick={() => setSettingsBright(b.value)}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                      active
+                        ? 'bg-amber-500 text-slate-900 border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    {b.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Current: {settingsBright} / 255</p>
+          </div>
+
+          {settingsFlash && (
+            <p className="text-xs text-emerald-400">{settingsFlash}</p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-1">
+            <button type="button" className="btn-ghost" onClick={() => setSettingsTarget(null)}>Cancel</button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={settingsBusy}
+              onClick={handleSaveSettings}
+            >
+              {settingsBusy ? 'Saving…' : 'Apply'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

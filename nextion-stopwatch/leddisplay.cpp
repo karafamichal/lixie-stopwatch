@@ -14,7 +14,8 @@ namespace LedDisplay {
 enum Mode { MODE_BLANK, MODE_CLOCK, MODE_STOPWATCH, MODE_HOLD };
 
 static Mode     sMode        = MODE_BLANK;
-static CRGB     sColor       = CRGB(255, 80, 0);   // Lixie orange
+static CRGB     sColor       = CRGB(255, 128, 0); // active draw colour
+static CRGB     sClockColor  = CRGB(255, 128, 0); // colour reused on clockMode()
 static uint32_t sStartMs     = 0;
 static uint32_t sHoldSeconds = 0;
 static uint32_t sLastSec     = 0xFFFFFFFF;          // force first draw
@@ -49,8 +50,26 @@ void holdDuration(uint32_t totalSeconds, CRGB color) {
 
 void clockMode() {
     sMode    = MODE_CLOCK;
-    sColor   = CRGB(255, 80, 0);
+    sColor   = sClockColor;
     sLastSec = 0xFFFFFFFF;
+}
+
+void setClockColor(CRGB c) {
+    sClockColor = c;
+    if (sMode == MODE_CLOCK) {
+        sColor = c;
+        sLastSec = 0xFFFFFFFF;   // force re-draw on next tick
+    }
+}
+
+void setClockColorHex(const String& hex) {
+    if (hex.length() != 7 || hex[0] != '#') return;
+    long v = strtol(hex.c_str() + 1, nullptr, 16);
+    setClockColor(CRGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF));
+}
+
+void setBrightness(uint8_t b) {
+    setLedBrightness(b);
 }
 
 void blank() {

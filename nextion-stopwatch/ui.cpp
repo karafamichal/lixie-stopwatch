@@ -12,8 +12,10 @@
 #include "api.h"
 #include "config.h"
 #include "leddisplay.h"
+#include "ledmap.h"
 #include "weather.h"
 #include "news.h"
+#include "settings.h"
 #include <WiFi.h>
 #include <time.h>
 #include <FastLED.h>
@@ -70,6 +72,28 @@ static int      sIdleNewsIdx        = 0;
 static String   sToastMsg;
 static uint32_t sToastUntil = 0;
 static Screen   sToastNext  = SCR_IDLE;
+
+// ---- Settings screen --------------------------------------------------------
+struct ColorPreset { const char* hex; uint16_t rgb565; };
+static const ColorPreset COLOR_PRESETS[] = {
+    {"#FF8000", 0xFC00},  // Lixie orange
+    {"#FF0000", 0xF800},  // Red
+    {"#FFD700", 0xFEA0},  // Gold
+    {"#00FF00", 0x07E0},  // Green
+    {"#00FFFF", 0x07FF},  // Cyan
+    {"#FF00FF", 0xF81F},  // Magenta
+};
+static const int N_COLOR_PRESETS = 6;
+
+static const uint8_t BRIGHT_LEVELS[]   = {30, 80, 150, 250};
+static const char*   BRIGHT_LABELS[]   = {"Low", "Med", "High", "Max"};
+static const int     N_BRIGHT_LEVELS   = 4;
+
+// Editor state — set in initSettingsScreen, applied to NVS on Save.
+static int    sTempColorIdx      = 0;
+static int    sTempBrightIdx     = 3;
+static String sSettingsOrigHex;
+static uint8_t sSettingsOrigBri  = LED_BRIGHTNESS;
 
 // Discard-confirm context: where to land if the user picks Yes, and where to
 // go back to on No. Set by the caller right before transitioning into
@@ -283,10 +307,20 @@ static void drawIdleNews() {
     sIdleNewsRotateMs = millis();
 }
 
+static void drawIdleSettingsButton() {
+    // Settings entry point — uses the top-right corner that the home button
+    // occupies on every other screen. Plain panel tile + bold "..." marker.
+    Nextion::fillRect(HOME_X, 4, HOME_W, HOME_H, COL_PANEL);
+    Nextion::drawRect(HOME_X, 4, HOME_W, HOME_H, COL_ACCENT);
+    Nextion::drawTextCentered(HOME_X, 4, HOME_W, HOME_H,
+                              FONT_LARGE, COL_ACCENT, COL_PANEL, "...");
+}
+
 static void drawIdle() {
     Nextion::clear(COL_BG);
     Nextion::drawTextCentered(0, 4, DISP_W, 38,
                               FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPKY");
+    drawIdleSettingsButton();
 
     drawIdleWeather();
     drawIdleNews();
@@ -396,6 +430,134 @@ static void drawConfirmScreen() {
                               FONT_MEDIUM, COL_BLACK, COL_GREEN, "Save");
 }
 
+// Settings layout constants — kept here so both draw and hit-test agree.
+static const int SET_SWATCH_W   = 54;
+static const int SET_SWATCH_H   = 40;
+static const int SET_SWATCH_Y   = 78;
+static const int SET_SWATCH_GAP = 4;
+static const int SET_SWATCH_X0  = 28;       // (400 - (6*54 + 5*4)) / 2
+
+static const int SET_BRIGHT_W   = 84;
+static const int SET_BRIGHT_H   = 36;
+static const int SET_BRIGHT_Y   = 156;
+static const int SET_BRIGHT_GAP = 12;
+static const int SET_BRIGHT_X0  = 14;       // (400 - (4*84 + 3*12)) / 2
+
+static const int SET_BTN_Y      = 200;
+static const int SET_BTN_W      = 156;
+static const int SET_BTN_H      = 32;
+
+static int settingsSwatchX(int i) { return SET_SWATCH_X0 + i * (SET_SWATCH_W + SET_SWATCH_GAP); }
+static int settingsBrightX(int i) { return SET_BRIGHT_X0 + i * (SET_BRIGHT_W + SET_BRIGHT_GAP); }
+
+static void drawSettingsScreen() {
+    Nextion::clear(COL_BG);
+    drawHeader("Settings", false);  // home button is at right edge
+
+    // ---- Clock colour row ----
+    Nextion::drawTextSty(20, 50, 360, 24,
+                         FONT_MEDIUM, COL_TEXT, COL_BG, 0, 1, 1,
+                         "Clock colour:");
+    for (int i = 0; i < N_COLOR_PRESETS; i++) {
+        int x = settingsSwatchX(i);
+        Nextion::fillRect(x, SET_SWATCH_Y, SET_SWATCH_W, SET_SWATCH_H,
+                          COLOR_PRESETS[i].rgb565);
+        if (sTempColorIdx == i) {
+            // Bright outline ring to show selection.
+            Nextion::drawRect(x - 2, SET_SWATCH_Y - 2,
+                              SET_SWATCH_W + 4, SET_SWATCH_H + 4, COL_WHITE);
+        }
+    }
+
+    // ---- Brightness row ----
+    Nextion::drawTextSty(20, 128, 360, 24,
+                         FONT_MEDIUM, COL_TEXT, COL_BG, 0, 1, 1,
+                         "Brightness:");
+    for (int i = 0; i < N_BRIGHT_LEVELS; i++) {
+        int      x   = settingsBrightX(i);
+        bool     on  = (sTempBrightIdx == i);
+        uint16_t bg  = on ? COL_ACCENT : COL_PANEL;
+        uint16_t fg  = on ? COL_BLACK  : COL_TEXT;
+        Nextion::fillRect(x, SET_BRIGHT_Y, SET_BRIGHT_W, SET_BRIGHT_H, bg);
+        Nextion::drawTextCentered(x, SET_BRIGHT_Y, SET_BRIGHT_W, SET_BRIGHT_H,
+                                  FONT_MEDIUM, fg, bg, BRIGHT_LABELS[i]);
+    }
+
+    // ---- Save / Cancel ----
+    Nextion::fillRect(28, SET_BTN_Y, SET_BTN_W, SET_BTN_H, COL_GREEN);
+    Nextion::drawTextCentered(28, SET_BTN_Y, SET_BTN_W, SET_BTN_H,
+                              FONT_MEDIUM, COL_BLACK, COL_GREEN, "Save");
+
+    int cancelX = DISP_W - SET_BTN_W - 28;
+    Nextion::fillRect(cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H, COL_PANEL);
+    Nextion::drawTextCentered(cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H,
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL, "Cancel");
+}
+
+static void initSettingsScreen() {
+    sSettingsOrigHex = Settings::clockColorHex();
+    sSettingsOrigBri = Settings::brightness();
+
+    sTempColorIdx = 0;
+    for (int i = 0; i < N_COLOR_PRESETS; i++) {
+        if (sSettingsOrigHex.equalsIgnoreCase(COLOR_PRESETS[i].hex)) {
+            sTempColorIdx = i;
+            break;
+        }
+    }
+    sTempBrightIdx = N_BRIGHT_LEVELS - 1;
+    for (int i = 0; i < N_BRIGHT_LEVELS; i++) {
+        if (sSettingsOrigBri <= BRIGHT_LEVELS[i]) { sTempBrightIdx = i; break; }
+    }
+}
+
+static void onTouchSettings(const NextionTouch& t) {
+    // Home in header → cancel and exit.
+    if (inHomeButton(t, 4)) {
+        // Restore preview to the originals before leaving.
+        LedDisplay::setClockColorHex(sSettingsOrigHex);
+        LedDisplay::setBrightness(sSettingsOrigBri);
+        goTo(SCR_IDLE);
+        return;
+    }
+
+    // Colour swatches — live preview only, no NVS write yet.
+    for (int i = 0; i < N_COLOR_PRESETS; i++) {
+        if (inRect(t, settingsSwatchX(i), SET_SWATCH_Y,
+                   SET_SWATCH_W, SET_SWATCH_H)) {
+            sTempColorIdx = i;
+            LedDisplay::setClockColorHex(COLOR_PRESETS[i].hex);
+            sDirty = true;
+            return;
+        }
+    }
+    // Brightness — live preview.
+    for (int i = 0; i < N_BRIGHT_LEVELS; i++) {
+        if (inRect(t, settingsBrightX(i), SET_BRIGHT_Y,
+                   SET_BRIGHT_W, SET_BRIGHT_H)) {
+            sTempBrightIdx = i;
+            LedDisplay::setBrightness(BRIGHT_LEVELS[i]);
+            sDirty = true;
+            return;
+        }
+    }
+    // Save
+    if (inRect(t, 28, SET_BTN_Y, SET_BTN_W, SET_BTN_H)) {
+        Settings::setClockColorHex(COLOR_PRESETS[sTempColorIdx].hex);
+        Settings::setBrightness   (BRIGHT_LEVELS[sTempBrightIdx]);
+        toast("Saved", 900, SCR_IDLE);
+        return;
+    }
+    // Cancel
+    int cancelX = DISP_W - SET_BTN_W - 28;
+    if (inRect(t, cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H)) {
+        LedDisplay::setClockColorHex(sSettingsOrigHex);
+        LedDisplay::setBrightness(sSettingsOrigBri);
+        goTo(SCR_IDLE);
+        return;
+    }
+}
+
 static void drawToastScreen() {
     Nextion::clear(COL_BG);
     Nextion::fillRect(20, 80, DISP_W - 40, 80, COL_PANEL);
@@ -486,6 +648,12 @@ static void onScrollHit(int hit, int count, int& offset) {
 }
 
 static void onTouchIdle(const NextionTouch& t) {
+    // Settings tile (top-right corner) → matrix colour / brightness editor.
+    if (inHomeButton(t, 4)) {
+        initSettingsScreen();
+        goTo(SCR_SETTINGS);
+        return;
+    }
     // Hidden affordance: tapping the weather strip forces a refresh. No
     // visible hint — the strip just updates if anything changed.
     if (inRect(t, 20, 48, DISP_W - 40, 36)) {
@@ -647,6 +815,7 @@ void tick() {
             case SCR_RUNNING:         drawRunningScreen();        break;
             case SCR_CONFIRM:         drawConfirmScreen();        break;
             case SCR_DISCARD_CONFIRM: drawDiscardConfirmScreen(); break;
+            case SCR_SETTINGS:        drawSettingsScreen();       break;
             case SCR_TOAST:           drawToastScreen();          break;
         }
         sDirty = false;
@@ -679,12 +848,16 @@ void handleTouch(const NextionTouch& t) {
         case SCR_RUNNING:         onTouchRunning(t);        break;
         case SCR_CONFIRM:         onTouchConfirm(t);        break;
         case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
+        case SCR_SETTINGS:        onTouchSettings(t);       break;
         default: break;
     }
 }
 
 LiveSnapshot getLiveSnapshot() {
     LiveSnapshot s;
+    // Safe default — guarantees s.state is never an uninitialized pointer if
+    // a new Screen value is added without a matching case below.
+    s.state = "idle";
 
     switch (sScreen) {
         case SCR_IDLE:            s.state = "idle";       break;
@@ -694,6 +867,7 @@ LiveSnapshot getLiveSnapshot() {
         case SCR_RUNNING:         s.state = sPaused ? "paused" : "running"; break;
         case SCR_CONFIRM:         s.state = "confirm";    break;
         case SCR_DISCARD_CONFIRM: s.state = "running";    break;   // session still alive
+        case SCR_SETTINGS:        s.state = "idle";       break;
         case SCR_TOAST:           s.state = "idle";       break;
         case SCR_BOOT:            s.state = "boot";       break;
     }

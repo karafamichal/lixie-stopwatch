@@ -1,6 +1,7 @@
 #include "wsclient.h"
 #include "config.h"
 #include "ui.h"
+#include "settings.h"
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
@@ -23,10 +24,33 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_ERROR:
             Serial.printf("[ws] error len=%u\n", (unsigned)length);
             break;
-        case WStype_TEXT:
-            // Currently we don't act on server→device messages. Reserved for
-            // future remote-control commands (e.g. forced refresh).
+        case WStype_TEXT: {
+            // Server → device control. Currently the only command shape is
+            //   { "type": "settings", "color": "#RRGGBB", "brightness": 0..255 }
+            // sent by the dashboard when an operator edits this device.
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, payload, length);
+            if (err) {
+                Serial.printf("[ws] bad msg: %s\n", err.c_str());
+                break;
+            }
+            const char* msgType = doc["type"] | "";
+            if (strcmp(msgType, "settings") == 0) {
+                if (doc["color"].is<const char*>()) {
+                    Settings::setClockColorHex(doc["color"].as<String>());
+                }
+                if (doc["brightness"].is<int>()) {
+                    int b = doc["brightness"].as<int>();
+                    if (b < 0)   b = 0;
+                    if (b > 255) b = 255;
+                    Settings::setBrightness((uint8_t)b);
+                }
+                Serial.printf("[ws] settings applied color=%s bright=%u\n",
+                              Settings::clockColorHex().c_str(),
+                              Settings::brightness());
+            }
             break;
+        }
         default:
             break;
     }

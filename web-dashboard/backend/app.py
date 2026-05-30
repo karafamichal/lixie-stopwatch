@@ -13,9 +13,11 @@ from models import db, Client, Project, App, Device, TimeLog, BUILTIN_APPS
 # In-memory: snapshot of every device's current state + the set of dashboards
 # subscribed to live updates. Single-worker deployment assumed (see README /
 # service file). For multi-worker scaling, swap this for a Redis pub/sub.
-_live_lock = threading.Lock()
-_live_states = {}        # hardware_id -> last state dict
-_live_subscribers = set()  # subscriber WebSocket handles (dashboards)
+_live_lock        = threading.Lock()
+_live_states      = {}    # hardware_id -> last state dict
+_live_subscribers = set() # subscriber WebSocket handles (dashboards)
+_device_sockets   = {}    # hardware_id -> active device WebSocket handle
+_device_settings  = {}    # hardware_id -> {"color": "#RRGGBB", "brightness": int}
 
 
 def _broadcast(payload: str):
@@ -34,6 +36,25 @@ def _broadcast(payload: str):
         with _live_lock:
             for d in dead:
                 _live_subscribers.discard(d)
+
+
+def _send_to_device(hw_id: str, payload: dict) -> bool:
+    """Push a JSON payload to a specific device's WebSocket. Returns True if
+    the device is currently online; False otherwise (caller can choose to
+    cache the payload for the next reconnect).
+    """
+    with _live_lock:
+        ws = _device_sockets.get(hw_id)
+    if ws is None:
+        return False
+    try:
+        ws.send(json.dumps(payload))
+        return True
+    except Exception:
+        with _live_lock:
+            if _device_sockets.get(hw_id) is ws:
+                _device_sockets.pop(hw_id, None)
+        return False
 
 
 def _migrate(app):
@@ -478,6 +499,57 @@ def create_app():
         db.session.commit()
         return jsonify(device.to_dict())
 
+    @app.route('/api/v1/devices/<int:did>/settings', methods=['GET', 'PUT'])
+    def device_settings(did):
+        """Read or push LED matrix settings (clock colour + brightness) to a
+        device. Settings are cached server-side so they survive both
+        dashboard refreshes and brief device disconnects — when the device
+        next sends a state message we resend the latest cached values.
+        """
+        device = db.get_or_404(Device, did)
+        hw_id  = device.hardware_id
+
+        if request.method == 'GET':
+            with _live_lock:
+                cached = _device_settings.get(hw_id, {})
+                online = hw_id in _device_sockets
+            return jsonify({
+                'hardware_id': hw_id,
+                'color':       cached.get('color'),
+                'brightness':  cached.get('brightness'),
+                'online':      online,
+            })
+
+        data = request.get_json() or {}
+        update = {}
+
+        if 'color' in data:
+            c = (data['color'] or '').strip()
+            if not (len(c) == 7 and c.startswith('#')):
+                abort(400, description="color must be #RRGGBB")
+            update['color'] = c.upper()
+        if 'brightness' in data:
+            try:
+                b = int(data['brightness'])
+            except Exception:
+                abort(400, description="brightness must be an integer")
+            if b < 0 or b > 255:
+                abort(400, description="brightness must be 0..255")
+            update['brightness'] = b
+        if not update:
+            abort(400, description="nothing to update")
+
+        with _live_lock:
+            merged = {**_device_settings.get(hw_id, {}), **update}
+            _device_settings[hw_id] = merged
+
+        delivered = _send_to_device(hw_id, {'type': 'settings', **merged})
+        return jsonify({
+            'hardware_id': hw_id,
+            **merged,
+            'delivered': delivered,        # False if device was offline
+        })
+
     @app.route('/api/v1/devices/<int:did>', methods=['DELETE'])
     def delete_device(did):
         device = db.get_or_404(Device, did)
@@ -632,6 +704,7 @@ def create_app():
             { "type": "device_state", ...same shape as device push... }
         """
         role = None
+        device_hw = None
         try:
             while True:
                 raw = ws.receive(timeout=120)
@@ -648,11 +721,18 @@ def create_app():
                     hw_id = (msg.get('hardware_id') or '').strip()
                     if not hw_id:
                         continue
+                    first_msg = (role is None)
                     role = 'device'
+                    device_hw = hw_id
+
                     msg['received_at'] = datetime.utcnow().isoformat() + 'Z'
                     msg['type'] = 'device_state'
+                    cached_settings = None
                     with _live_lock:
                         _live_states[hw_id] = msg
+                        _device_sockets[hw_id] = ws
+                        cached_settings = _device_settings.get(hw_id)
+
                     # Keep the existing "Online" indicator working — same
                     # last_seen field the dashboard polls.
                     device = Device.query.filter_by(hardware_id=hw_id).first()
@@ -665,6 +745,17 @@ def create_app():
                     except Exception:
                         db.session.rollback()
                     _broadcast(json.dumps(msg))
+
+                    # If the dashboard pushed settings while this device was
+                    # offline, deliver them the moment it comes back.
+                    if first_msg and cached_settings:
+                        try:
+                            ws.send(json.dumps({
+                                'type': 'settings',
+                                **cached_settings,
+                            }))
+                        except Exception:
+                            pass
 
                 elif mtype == 'subscribe':
                     role = 'subscriber'
@@ -682,6 +773,10 @@ def create_app():
             if role == 'subscriber':
                 with _live_lock:
                     _live_subscribers.discard(ws)
+            if role == 'device' and device_hw:
+                with _live_lock:
+                    if _device_sockets.get(device_hw) is ws:
+                        _device_sockets.pop(device_hw, None)
 
     # ── SPA fallback ──────────────────────────────────────────────────────────
 

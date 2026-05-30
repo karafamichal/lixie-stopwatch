@@ -23,6 +23,7 @@ enum Screen {
     SCR_RUNNING,
     SCR_CONFIRM,
     SCR_DISCARD_CONFIRM,
+    SCR_SETTINGS,
     SCR_TOAST
 };
 

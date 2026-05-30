@@ -43,6 +43,11 @@ void clearAll() {
     FastLED.show();
 }
 
+void setLedBrightness(uint8_t b) {
+    FastLED.setBrightness(b);
+    FastLED.show();
+}
+
 void showDigits(int d0, int d1, int d2, int d3, int d4, int d5, CRGB color) {
     for (int i = 0; i < 70; i++) leds[i] = CRGB::Black;
 

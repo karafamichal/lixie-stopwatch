@@ -23,8 +23,17 @@ void startStopwatch(uint32_t startMs, CRGB color);
 // Hold the matrix at a fixed duration (used while the user picks Save/Discard).
 void holdDuration(uint32_t totalSeconds, CRGB color);
 
-// Return to wall-clock display in Lixie orange.
+// Return to wall-clock display using the saved/default clock colour.
 void clockMode();
+
+// Override the colour used by clockMode(). Applies immediately if the matrix
+// is currently in clock mode. setClockColorHex() parses "#RRGGBB" form.
+void setClockColor(CRGB c);
+void setClockColorHex(const String& hex);
+
+// Live brightness preview — does not write to NVS. Wraps the global
+// setLedBrightness() so UI code can keep all LED ops under one facade.
+void setBrightness(uint8_t b);
 
 // Blank everything (only for boot / errors — normally the matrix is always on).
 void blank();

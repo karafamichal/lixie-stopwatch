@@ -22,6 +22,7 @@
 #include "api.h"
 #include "wifimgr.h"
 #include "wsclient.h"
+#include "settings.h"
 
 static void enterApSetupMode() {
     UI::showBootMessage(String("WiFi setup mode\n")
@@ -56,6 +57,7 @@ void setup() {
     Serial.println("[boot] init leds...");
     Serial.flush();
     LedDisplay::begin();
+    Settings::begin();   // applies saved colour + brightness over defaults
     Serial.println("[boot] leds ok");
     Serial.flush();
 

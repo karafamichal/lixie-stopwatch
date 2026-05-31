@@ -66,10 +66,26 @@ void setColons(bool leftOn, bool rightOn, CRGB color) {
     FastLED.show();
 }
 
+void setColonColor(CRGB color) {
+    colonColor = color;
+    // Ak práve blikáme, necháme blikanie pokračovať s novou farbou
+    if (blinkEnabled) {
+        // Aktuálny stav dvojbodiek prekreslíme s novou farbou
+        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
+        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
+        FastLED.show();
+    } else {
+        // Ak nebliká, nastavíme trvalý stav podľa aktuálnych colonLeftState/RightState
+        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
+        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
+        FastLED.show();
+    }
+}
+
 void setColonBlink(bool enabled, unsigned long intervalMs) {
-    blinkEnabled  = enabled;
+    blinkEnabled = enabled;
     blinkInterval = intervalMs;
-    lastBlink     = millis();
+    lastBlink = millis();
 }
 
 void updateColonBlink() {

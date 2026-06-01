@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Pencil, Trash2, Wifi, WifiOff, Palette } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
@@ -12,17 +12,20 @@ const BRIGHTNESS_LEVELS = [
   { label: 'Max',  value: 250 },
 ];
 
+// A device is "live" if we've received a WS state push from it in the last
+// 15 s. The ESP32 pushes idle state every 5 s, so 15 s is conservative.
+const LIVE_WINDOW_MS = 15000;
+
+// REST fallback: a `last_seen` newer than this counts as online even without
+// a WS message yet (covers page load before the first WS state arrives).
+const RECENT_LAST_SEEN_MS = 60000;
+
 function findBrightnessIdx(v) {
   if (v == null) return 3;
   for (let i = 0; i < BRIGHTNESS_LEVELS.length; i++) {
     if (v <= BRIGHTNESS_LEVELS[i].value) return i;
   }
   return BRIGHTNESS_LEVELS.length - 1;
-}
-
-function isOnline(lastSeen) {
-  if (!lastSeen) return false;
-  return (Date.now() - new Date(lastSeen).getTime()) < 5 * 60 * 1000;
 }
 
 export default function Devices() {
@@ -35,9 +38,16 @@ export default function Devices() {
   // Matrix settings editor
   const [settingsTarget, setSettingsTarget] = useState(null);
   const [settingsColor,  setSettingsColor]  = useState('#FF8000');
+  const [settingsColon,  setSettingsColon]  = useState('#FF8000');
+  const [settingsLinked, setSettingsLinked] = useState(true);
   const [settingsBright, setSettingsBright] = useState(150);
   const [settingsBusy,   setSettingsBusy]   = useState(false);
   const [settingsFlash,  setSettingsFlash]  = useState('');
+
+  // Live presence — hardware_id -> last-WS-message timestamp (ms).
+  const [liveSeen, setLiveSeen] = useState({});
+  const [now,      setNow]      = useState(Date.now());
+  const wsRef = useRef(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -47,6 +57,67 @@ export default function Devices() {
   }, []);
 
   useEffect(load, [load]);
+
+  // Tick a local clock so the icon flips back to offline even when the WS
+  // goes silent (e.g. device powered off — no message to react to).
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Subscribe to the dashboard WS so every device_state push refreshes our
+  // liveSeen map. Auto-reconnects on close.
+  useEffect(() => {
+    let closed = false;
+    let retryTimer = null;
+
+    const open = () => {
+      if (closed) return;
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/api/v1/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe' }));
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'device_state' && msg.hardware_id) {
+            setLiveSeen(s => ({ ...s, [msg.hardware_id]: Date.now() }));
+          }
+        } catch {}
+      };
+      ws.onclose = () => {
+        if (closed) return;
+        retryTimer = setTimeout(open, 2000);
+      };
+      ws.onerror = () => ws.close();
+    };
+
+    // Seed with the REST live snapshot so devices show online right away
+    // even before the first WS message lands.
+    fetch('/api/v1/live')
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => {
+        const seed = {};
+        for (const r of rows) seed[r.hardware_id] = Date.now();
+        setLiveSeen(s => ({ ...seed, ...s }));
+      })
+      .catch(() => {});
+
+    open();
+    return () => {
+      closed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, []);
+
+  const isOnline = useCallback((d) => {
+    const live = liveSeen[d.hardware_id];
+    if (live && now - live < LIVE_WINDOW_MS) return true;
+    if (d.last_seen && Date.now() - new Date(d.last_seen).getTime() < RECENT_LAST_SEEN_MS) return true;
+    return false;
+  }, [liveSeen, now]);
 
   const openEdit = (d) => { setLabel(d.label || ''); setEditTarget(d); };
 
@@ -69,10 +140,15 @@ export default function Devices() {
     setSettingsBusy(true);
     try {
       const s = await api.devices.getSettings(d.id);
-      setSettingsColor (s.color      || '#FF8000');
+      const c = s.color || '#FF8000';
+      setSettingsColor (c);
+      setSettingsColon (s.colon_color || c);
+      setSettingsLinked(s.colon_linked !== false);   // default true
       setSettingsBright(s.brightness != null ? s.brightness : 150);
     } catch {
       setSettingsColor('#FF8000');
+      setSettingsColon('#FF8000');
+      setSettingsLinked(true);
       setSettingsBright(150);
     } finally {
       setSettingsBusy(false);
@@ -83,10 +159,15 @@ export default function Devices() {
     setSettingsBusy(true);
     setSettingsFlash('');
     try {
-      const res = await api.devices.setSettings(settingsTarget.id, {
-        color:      settingsColor,
-        brightness: settingsBright,
-      });
+      const payload = {
+        color:        settingsColor,
+        brightness:   settingsBright,
+        colon_linked: settingsLinked,
+      };
+      // When unlinked, send the user's colon choice; when linked, the server
+      // mirrors `color` so we don't need to send colon_color at all.
+      if (!settingsLinked) payload.colon_color = settingsColon;
+      const res = await api.devices.setSettings(settingsTarget.id, payload);
       setSettingsFlash(res.delivered
         ? 'Sent to device.'
         : 'Saved — device is offline, will apply on next connect.');
@@ -143,7 +224,7 @@ export default function Devices() {
                 </td>
               </tr>
             ) : devices.map(d => {
-              const online = isOnline(d.last_seen);
+              const online = isOnline(d);
               return (
                 <tr key={d.id} className="tr">
                   <td className="td">
@@ -171,7 +252,7 @@ export default function Devices() {
         ) : devices.length === 0 ? (
           <p className="text-center text-slate-500 py-10">No devices yet.</p>
         ) : devices.map(d => {
-          const online = isOnline(d.last_seen);
+          const online = isOnline(d);
           return (
             <div key={d.id} className="card p-3 sm:p-4">
               <div className="flex items-center gap-3 mb-2">
@@ -233,6 +314,35 @@ export default function Devices() {
           <div>
             <p className="label mb-2">Clock colour</p>
             <ColorPicker value={settingsColor} onChange={setSettingsColor} />
+          </div>
+
+          <div>
+            <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
+              <span className="text-sm text-slate-300">
+                Use same colour for the blinking dots
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settingsLinked}
+                onClick={() => setSettingsLinked(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                  settingsLinked ? 'bg-amber-500' : 'bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settingsLinked ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+            {!settingsLinked && (
+              <div className="mt-3 pl-1">
+                <p className="label mb-2">Colon dot colour</p>
+                <ColorPicker value={settingsColon} onChange={setSettingsColon} />
+              </div>
+            )}
           </div>
 
           <div>

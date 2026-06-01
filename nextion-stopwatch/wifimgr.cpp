@@ -53,7 +53,7 @@ static String renderPage(const String& flash) {
     h.reserve(2048);
     h += F("<!DOCTYPE html><html><head><meta charset='utf-8'>"
            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-           "<title>Lixie Stopky WiFi Setup</title><style>"
+           "<title>Lixie StopWatch WiFi Setup</title><style>"
            "body{font-family:sans-serif;background:#15171c;color:#eee;"
            "max-width:480px;margin:0 auto;padding:18px;}"
            "h1{color:#ff8000;margin-bottom:4px;font-size:22px;}"
@@ -69,7 +69,7 @@ static String renderPage(const String& flash) {
            "border-radius:6px;font-size:13px;}"
            ".foot{margin-top:24px;color:#666;font-size:11px;}"
            "</style></head><body>"
-           "<h1>LIXIE STOPKY</h1>"
+           "<h1>LIXIE STOPWATCH</h1>"
            "<div class='sub'>WiFi setup — pick a network and enter the password</div>");
 
     if (flash.length()) {

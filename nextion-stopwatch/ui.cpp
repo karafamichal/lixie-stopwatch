@@ -268,7 +268,7 @@ static int listHit(const NextionTouch& t, int count, int offset) {
 // ---------------------------------------------------------------------------
 //
 // Idle screen layout (400 x 240):
-//   y=  4..42  title "LIXIE STOPKY"
+//   y=  4..42  title "LIXIE STOPWATCH"
 //   y= 48..82  weather panel (city, temp, condition)
 //   y= 88..136 news headline (rotates every NEWS_ROTATE_MS)
 //   y=148..200 "TAP TO START" button
@@ -319,7 +319,7 @@ static void drawIdleSettingsButton() {
 static void drawIdle() {
     Nextion::clear(COL_BG);
     Nextion::drawTextCentered(0, 4, DISP_W, 38,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPKY");
+                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPWATCH");
     drawIdleSettingsButton();
 
     drawIdleWeather();
@@ -776,7 +776,7 @@ static void onTouchConfirm(const NextionTouch& t) {
 void showBootMessage(const String& msg) {
     Nextion::clear(COL_BG);
     Nextion::drawTextCentered(0, 80, DISP_W, 40,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPKY");
+                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPWATCH");
     Nextion::drawTextCentered(0, 130, DISP_W, 30,
                               FONT_MEDIUM, COL_MUTED, COL_BG, msg);
     sScreen = SCR_BOOT;

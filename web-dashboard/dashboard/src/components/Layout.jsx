@@ -51,7 +51,7 @@ function Brand() {
       <span className="text-2xl">⏱</span>
       <div>
         <p className="text-sm font-bold text-amber-400 leading-tight tracking-wide uppercase">Lixie</p>
-        <p className="text-xs text-slate-500 leading-tight tracking-wider uppercase">Stopky</p>
+        <p className="text-xs text-slate-500 leading-tight tracking-wider uppercase">StopWatch</p>
       </div>
     </div>
   );

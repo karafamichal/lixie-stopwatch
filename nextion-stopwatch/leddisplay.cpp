@@ -3,6 +3,10 @@
 // In CLOCK mode it reads system time via time(nullptr) and splits into hours/
 // minutes/seconds. In STOPWATCH it computes the difference from sStartMs.
 // Calls low‑level functions from ledmap.cpp to light up individual LEDs.
+//
+// Colon LEDs (the two "seconds" dots) have an INDEPENDENT colour that does
+// not change with mode — only Settings::setColonColorHex() (driven by the
+// web dashboard) updates them.
 // ============================================================================
 
 #include "leddisplay.h"
@@ -30,7 +34,8 @@ static void pushTime(uint32_t totalSec) {
 void begin() {
     initLeds();
     setColonBlink(true, 1000);
-    setColonColor(CRGB(255, 80, 0));
+    // The colon colour gets its real value from Settings::begin() right after
+    // this; leave the ledmap default in place until then.
     sMode = MODE_CLOCK;
     sLastSec = 0xFFFFFFFF;
 }
@@ -40,7 +45,6 @@ void startStopwatch(uint32_t startMs, CRGB color) {
     sStartMs = startMs;
     sColor   = color;
     sLastSec = 0xFFFFFFFF;
-    setColonColor(sColor); 
 }
 
 void holdDuration(uint32_t totalSeconds, CRGB color) {
@@ -48,14 +52,12 @@ void holdDuration(uint32_t totalSeconds, CRGB color) {
     sHoldSeconds = totalSeconds;
     sColor       = color;
     sLastSec     = 0xFFFFFFFF;
-    setColonColor(sColor);
 }
 
 void clockMode() {
     sMode    = MODE_CLOCK;
     sColor   = sClockColor;
     sLastSec = 0xFFFFFFFF;
-    setColonColor(sColor);
 }
 
 void setClockColor(CRGB c) {
@@ -70,6 +72,12 @@ void setClockColorHex(const String& hex) {
     if (hex.length() != 7 || hex[0] != '#') return;
     long v = strtol(hex.c_str() + 1, nullptr, 16);
     setClockColor(CRGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF));
+}
+
+void setColonColorHex(const String& hex) {
+    if (hex.length() != 7 || hex[0] != '#') return;
+    long v = strtol(hex.c_str() + 1, nullptr, 16);
+    setColonColor(CRGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF));
 }
 
 void setBrightness(uint8_t b) {

@@ -25,9 +25,12 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
             Serial.printf("[ws] error len=%u\n", (unsigned)length);
             break;
         case WStype_TEXT: {
-            // Server → device control. Currently the only command shape is
-            //   { "type": "settings", "color": "#RRGGBB", "brightness": 0..255 }
-            // sent by the dashboard when an operator edits this device.
+            // Server → device control. Settings message shape:
+            //   { "type": "settings",
+            //     "color":       "#RRGGBB",   // clock/stopwatch digits
+            //     "colon_color": "#RRGGBB",   // independent — the two dots
+            //     "brightness":  0..255 }
+            // Any subset of fields may be present; missing keys are ignored.
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload, length);
             if (err) {
@@ -39,14 +42,18 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
                 if (doc["color"].is<const char*>()) {
                     Settings::setClockColorHex(doc["color"].as<String>());
                 }
+                if (doc["colon_color"].is<const char*>()) {
+                    Settings::setColonColorHex(doc["colon_color"].as<String>());
+                }
                 if (doc["brightness"].is<int>()) {
                     int b = doc["brightness"].as<int>();
                     if (b < 0)   b = 0;
                     if (b > 255) b = 255;
                     Settings::setBrightness((uint8_t)b);
                 }
-                Serial.printf("[ws] settings applied color=%s bright=%u\n",
+                Serial.printf("[ws] settings applied clock=%s colon=%s bright=%u\n",
                               Settings::clockColorHex().c_str(),
+                              Settings::colonColorHex().c_str(),
                               Settings::brightness());
             }
             break;

@@ -31,6 +31,10 @@ void clockMode();
 void setClockColor(CRGB c);
 void setClockColorHex(const String& hex);
 
+// Independent colour for the two colon LEDs. Stays the same across clock /
+// stopwatch / hold modes — i.e. it does NOT follow the digit colour.
+void setColonColorHex(const String& hex);
+
 // Live brightness preview — does not write to NVS. Wraps the global
 // setLedBrightness() so UI code can keep all LED ops under one facade.
 void setBrightness(uint8_t b);

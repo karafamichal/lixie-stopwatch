@@ -501,10 +501,19 @@ def create_app():
 
     @app.route('/api/v1/devices/<int:did>/settings', methods=['GET', 'PUT'])
     def device_settings(did):
-        """Read or push LED matrix settings (clock colour + brightness) to a
-        device. Settings are cached server-side so they survive both
-        dashboard refreshes and brief device disconnects — when the device
-        next sends a state message we resend the latest cached values.
+        """Read or push LED matrix settings to a device.
+
+        Tracked fields:
+          - color         clock / stopwatch digit colour ("#RRGGBB")
+          - colon_color   the two blinking colon dots ("#RRGGBB")
+          - colon_linked  when True the colon mirrors `color` automatically;
+                          when False `colon_color` is user-picked
+          - brightness    0..255 (single global FastLED brightness)
+
+        Settings are cached server-side so they survive both dashboard
+        refreshes and brief device disconnects — when the device next sends a
+        state message we resend the latest cached values. The device sees
+        only `color`, `colon_color`, `brightness` — the link flag stays here.
         """
         device = db.get_or_404(Device, did)
         hw_id  = device.hardware_id
@@ -514,10 +523,12 @@ def create_app():
                 cached = _device_settings.get(hw_id, {})
                 online = hw_id in _device_sockets
             return jsonify({
-                'hardware_id': hw_id,
-                'color':       cached.get('color'),
-                'brightness':  cached.get('brightness'),
-                'online':      online,
+                'hardware_id':  hw_id,
+                'color':        cached.get('color'),
+                'colon_color':  cached.get('colon_color'),
+                'colon_linked': cached.get('colon_linked', True),
+                'brightness':   cached.get('brightness'),
+                'online':       online,
             })
 
         data = request.get_json() or {}
@@ -528,6 +539,13 @@ def create_app():
             if not (len(c) == 7 and c.startswith('#')):
                 abort(400, description="color must be #RRGGBB")
             update['color'] = c.upper()
+        if 'colon_color' in data:
+            c = (data['colon_color'] or '').strip()
+            if not (len(c) == 7 and c.startswith('#')):
+                abort(400, description="colon_color must be #RRGGBB")
+            update['colon_color'] = c.upper()
+        if 'colon_linked' in data:
+            update['colon_linked'] = bool(data['colon_linked'])
         if 'brightness' in data:
             try:
                 b = int(data['brightness'])
@@ -541,13 +559,26 @@ def create_app():
 
         with _live_lock:
             merged = {**_device_settings.get(hw_id, {}), **update}
+            # Linking rule: if linked, colon mirrors the digit colour. If the
+            # user explicitly set a colon_color in the same request, unlink so
+            # we don't immediately stomp on their choice.
+            if 'colon_color' in update and 'colon_linked' not in update:
+                merged['colon_linked'] = False
+            if merged.get('colon_linked', True) and merged.get('color'):
+                merged['colon_color'] = merged['color']
             _device_settings[hw_id] = merged
 
-        delivered = _send_to_device(hw_id, {'type': 'settings', **merged})
+        # The device payload never includes the link flag — only the resolved
+        # colours and brightness.
+        device_payload = {'type': 'settings'}
+        for k in ('color', 'colon_color', 'brightness'):
+            if k in merged:
+                device_payload[k] = merged[k]
+        delivered = _send_to_device(hw_id, device_payload)
         return jsonify({
             'hardware_id': hw_id,
             **merged,
-            'delivered': delivered,        # False if device was offline
+            'delivered':   delivered,
         })
 
     @app.route('/api/v1/devices/<int:did>', methods=['DELETE'])
@@ -747,13 +778,16 @@ def create_app():
                     _broadcast(json.dumps(msg))
 
                     # If the dashboard pushed settings while this device was
-                    # offline, deliver them the moment it comes back.
+                    # offline, deliver them the moment it comes back. Strip
+                    # the dashboard-only `colon_linked` field — the firmware
+                    # only handles resolved colours and brightness.
                     if first_msg and cached_settings:
+                        payload = {'type': 'settings'}
+                        for k in ('color', 'colon_color', 'brightness'):
+                            if k in cached_settings:
+                                payload[k] = cached_settings[k]
                         try:
-                            ws.send(json.dumps({
-                                'type': 'settings',
-                                **cached_settings,
-                            }))
+                            ws.send(json.dumps(payload))
                         except Exception:
                             pass
 

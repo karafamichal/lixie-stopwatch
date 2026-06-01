@@ -40,7 +40,7 @@
 
 // Soft-AP that comes up when the ESP32 can't connect to any known network.
 // Connect a phone to it, then browse to http://192.168.4.1 to configure.
-#define AP_SSID                 "LixieStopky-Setup"
+#define AP_SSID                 "LixieStopWatch-Setup"
 #define AP_PASSWORD             ""           // empty = open AP
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 

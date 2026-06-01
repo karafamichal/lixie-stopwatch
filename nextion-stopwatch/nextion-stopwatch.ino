@@ -52,7 +52,7 @@ static void syncNtp() {
 void setup() {
     Serial.begin(115200);
     delay(50);
-    Serial.println("\n=== Lixie Stopky — Nextion edition ===");
+    Serial.println("\n=== Lixie StopWatch — Nextion edition ===");
 
     Serial.println("[boot] init leds...");
     Serial.flush();

@@ -138,7 +138,7 @@ export default function Homepage() {
           <div className="flex items-center gap-3 mb-2">
             <span className="text-3xl md:text-4xl drop-shadow">⏱</span>
             <div>
-              <p className="text-xl md:text-2xl font-bold text-white tracking-wide uppercase leading-tight drop-shadow">Lixie Stopky</p>
+              <p className="text-xl md:text-2xl font-bold text-white tracking-wide uppercase leading-tight drop-shadow">Lixie StopWatch</p>
               <p className="text-amber-200/70 text-xs md:text-sm tracking-widest uppercase">Time Tracking Dashboard</p>
             </div>
           </div>

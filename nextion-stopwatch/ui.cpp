@@ -901,4 +901,56 @@ LiveSnapshot getLiveSnapshot() {
     return s;
 }
 
+void writeStateExtras(JsonDocument& doc) {
+    // Per-screen content the dashboard needs to render an honest mirror.
+    if (sScreen == SCR_IDLE) {
+        const WeatherInfo& w = Weather::get();
+        if (w.valid) {
+            JsonObject wo = doc["weather"].to<JsonObject>();
+            wo["city"]      = w.city;
+            wo["temp_c"]    = w.tempC;
+            wo["condition"] = w.condition;
+        }
+        if (News::count() > 0) {
+            int idx = sIdleNewsIdx % News::count();
+            doc["news_headline"] = News::get(idx);
+        }
+        // Date matches the on-device footer ("DD.MM.YYYY").
+        time_t now = time(nullptr);
+        if (now > 100000) {
+            struct tm tm_local;
+            localtime_r(&now, &tm_local);
+            char buf[16];
+            strftime(buf, sizeof(buf), "%d.%m.%Y", &tm_local);
+            doc["idle_date"] = buf;
+        }
+    }
+    else if (sScreen == SCR_CLIENT || sScreen == SCR_PROJECT || sScreen == SCR_APP) {
+        Entity* arr = nullptr;
+        int count = 0, offset = 0;
+        if (sScreen == SCR_CLIENT) {
+            arr = sClients;  count = sClientCount;  offset = sClientOffset;
+        } else if (sScreen == SCR_PROJECT) {
+            arr = sProjects; count = sProjectCount; offset = sProjectOffset;
+        } else {
+            arr = sApps;     count = sAppCount;     offset = sAppOffset;
+        }
+        doc["list_count"]  = count;
+        doc["list_offset"] = offset;
+        JsonArray rows = doc["list_rows"].to<JsonArray>();
+        for (int i = 0; i < count; i++) {
+            JsonObject r = rows.add<JsonObject>();
+            r["name"]  = arr[i].name;
+            r["color"] = arr[i].color;
+            if (arr[i].extra.length()) r["extra"] = arr[i].extra;
+        }
+        // For PROJECT, the title shows the parent client name (already in
+        // s.clientName via getLiveSnapshot()); for APP, the parent project
+        // name. Nothing extra to add here.
+    }
+    else if (sScreen == SCR_TOAST) {
+        doc["toast_message"] = sToastMsg;
+    }
+}
+
 }  // namespace UI

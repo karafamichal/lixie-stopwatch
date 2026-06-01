@@ -11,6 +11,7 @@
 #define UI_H
 
 #include "nextion.h"
+#include <ArduinoJson.h>
 
 namespace UI {
 
@@ -68,6 +69,15 @@ struct LiveSnapshot {
 };
 
 LiveSnapshot getLiveSnapshot();
+
+// Append screen-specific extras to the outgoing state JSON so the dashboard
+// can render a faithful mirror without having to re-fetch lists, weather,
+// news, etc. by itself:
+//   - on IDLE:    weather{}, news_headline, idle_date
+//   - on CLIENT / PROJECT / APP: list_rows[], list_offset, list_count
+//   - on TOAST:   toast_message
+// Other screens get nothing added.
+void writeStateExtras(JsonDocument& doc);
 
 }  // namespace UI
 

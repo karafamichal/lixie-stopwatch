@@ -112,7 +112,12 @@ function Header({ title, showBack = false }) {
 
 // ── per-screen renderers ─────────────────────────────────────────────────────
 
-function IdleScreen() {
+function IdleScreen({ state }) {
+  const w = state?.weather;
+  const weatherText = w
+    ? `${w.city || ''}   ${typeof w.temp_c === 'number' ? w.temp_c.toFixed(1) : '–'} °C   ${w.condition || ''}`.trim()
+    : 'Weather unavailable';
+  const news = state?.news_headline ? `* ${state.news_headline}` : 'Loading news…';
   return (
     <>
       <Label x={0} y={4} w={DISP_W} h={38} size={22} weight={700} color={COL.accent}>LIXIE STOPWATCH</Label>
@@ -121,41 +126,75 @@ function IdleScreen() {
         <Label x={0} y={0} w={HOME_W} h={HOME_H} size={20} color={COL.accent} weight={700}>…</Label>
       </Rect>
 
-      {/* Weather strip placeholder */}
+      {/* Weather strip — actual data from the device's last fetch */}
       <Rect x={20} y={48} w={DISP_W - 40} h={36} bg={COL.panel}>
-        <Label x={0} y={0} w={DISP_W - 40} h={36} size={12} color={COL.muted}>weather</Label>
+        <Label x={0} y={0} w={DISP_W - 40} h={36} size={13} color={w ? COL.text : COL.muted}>
+          {weatherText}
+        </Label>
       </Rect>
 
-      {/* News placeholder */}
-      <Label x={20} y={88} w={DISP_W - 40} h={48} size={11} color={COL.muted}>* news headline rotates here…</Label>
+      {/* News (rotates on device every NEWS_ROTATE_MS) */}
+      <Label x={20} y={88} w={DISP_W - 40} h={48} size={11} color={COL.muted}>
+        {news}
+      </Label>
 
       {/* TAP TO START button */}
       <Rect x={60} y={148} w={DISP_W - 120} h={52} bg={COL.accent}>
         <Label x={0} y={0} w={DISP_W - 120} h={52} size={22} weight={700} color={COL.black}>TAP TO START</Label>
       </Rect>
 
-      {/* Footer (date) */}
-      <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>—</Label>
+      {/* Footer date — also pushed by firmware */}
+      <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>
+        {state?.idle_date || '—'}
+      </Label>
     </>
   );
 }
 
-function ListScreen({ title }) {
-  // The device renders the live list from the API; we don't have its rows
-  // streamed here. Show 4 empty row slots in the correct positions so taps
-  // still land where the firmware expects them.
-  const rows = [0, 1, 2, 3].map(i => {
-    const y = 52 + i * 44;
-    return (
-      <Rect key={i} x={12} y={y} w={376} h={40} bg={COL.panel}>
-        <Label x={48} y={0} w={300} h={40} size={13} align="left" color={COL.muted}>row {i + 1}</Label>
-      </Rect>
-    );
-  });
+// Render one Nextion list row (44 px tall on device; 40 px panel + 4 px gap).
+// Includes the colour chip on the left like the firmware's drawList().
+// All coords here are relative to the row (x=12, y=`y`) — chip = ROW_X+8 abs.
+function ListRow({ y, item }) {
+  if (!item) {
+    return <Rect x={12} y={y} w={376} h={40} bg={COL.panel} />;
+  }
+  const label = item.extra ? `${item.extra}  ${item.name}` : item.name;
+  return (
+    <Rect x={12} y={y} w={376} h={40} bg={COL.panel}>
+      {item.color && (
+        <div style={{
+          position: 'absolute',
+          left: 8,        // matches Nextion::fillRect(ROW_X + 8, y + 8, 24, …)
+          top: 8,
+          width: 24,
+          height: 24,
+          background: item.color,
+        }} />
+      )}
+      <Label x={40} y={4} w={376 - 50} h={28} size={13} align="left">
+        {label}
+      </Label>
+    </Rect>
+  );
+}
+
+function ListScreen({ title, state }) {
+  const rows    = state?.list_rows || [];
+  const offset  = state?.list_offset ?? 0;
+  const count   = state?.list_count ?? rows.length;
+  const visible = [0, 1, 2, 3].map(i => rows[offset + i] || null);
+  const empty   = count === 0;
   return (
     <>
       <Header title={title} />
-      {rows}
+      {visible.map((item, i) => (
+        <ListRow key={i} y={52 + i * 44} item={item} />
+      ))}
+      {empty && (
+        <Label x={12} y={52} w={376} h={44} size={13} color={COL.muted}>
+          No items available
+        </Label>
+      )}
       {/* Scroll up / down buttons */}
       <Rect x={DISP_W - 44} y={52} w={32} h={60} bg={COL.panel}>
         <Label x={0} y={0} w={32} h={60} size={22} color={COL.text}>^</Label>
@@ -163,15 +202,17 @@ function ListScreen({ title }) {
       <Rect x={DISP_W - 44} y={152} w={32} h={60} bg={COL.panel}>
         <Label x={0} y={0} w={32} h={60} size={22} color={COL.text}>v</Label>
       </Rect>
-      <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>Tap a row to continue</Label>
+      <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>
+        {count > 4 ? `${offset + 1}–${Math.min(offset + 4, count)} of ${count}` : `Tap a row to continue`}
+      </Label>
     </>
   );
 }
 
-function AppScreen() {
+function AppScreen({ state }) {
   return (
     <>
-      <ListScreen title="App — select" />
+      <ListScreen title={`App — ${state?.project_name || ''}`} state={state} />
       {/* Skip-app button overlays the footer area */}
       <Rect x={12} y={DISP_H - 44} w={120} h={30} bg={COL.panel}>
         <Label x={0} y={0} w={120} h={30} size={12}>Skip app</Label>
@@ -300,10 +341,12 @@ function SettingsScreen() {
   );
 }
 
-function ToastScreen() {
+function ToastScreen({ state }) {
   return (
     <Rect x={20} y={80} w={DISP_W - 40} h={80} bg={COL.panel}>
-      <Label x={0} y={0} w={DISP_W - 40} h={80} size={22} weight={700}>…</Label>
+      <Label x={0} y={0} w={DISP_W - 40} h={80} size={22} weight={700}>
+        {state?.toast_message || '…'}
+      </Label>
     </Rect>
   );
 }
@@ -319,17 +362,17 @@ function BootScreen() {
 
 function ScreenContent({ screen, state }) {
   switch (screen) {
-    case 'idle':            return <IdleScreen />;
-    case 'client':          return <ListScreen title="Select client" />;
-    case 'project':         return <ListScreen title={`Project — ${state?.client_name || ''}`} />;
-    case 'app':             return <AppScreen />;
+    case 'idle':            return <IdleScreen state={state} />;
+    case 'client':          return <ListScreen title="Select client" state={state} />;
+    case 'project':         return <ListScreen title={`Project — ${state?.client_name || ''}`} state={state} />;
+    case 'app':             return <AppScreen state={state} />;
     case 'running':         return <RunningScreen state={state} />;
     case 'confirm':         return <ConfirmScreen state={state} />;
     case 'discard_confirm': return <DiscardConfirmScreen state={state} />;
     case 'settings':        return <SettingsScreen />;
-    case 'toast':           return <ToastScreen />;
+    case 'toast':           return <ToastScreen state={state} />;
     case 'boot':            return <BootScreen />;
-    default:                return <IdleScreen />;
+    default:                return <IdleScreen state={state} />;
   }
 }
 

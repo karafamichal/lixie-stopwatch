@@ -104,6 +104,10 @@ static void pushState() {
         doc["start_timestamp"] = s.startIso;
     }
 
+    // Screen-specific extras (list rows, weather, news, toast text...) so the
+    // dashboard remote can render a faithful mirror without a side fetch.
+    UI::writeStateExtras(doc);
+
     String body;
     serializeJson(doc, body);
     ws.sendTXT(body);

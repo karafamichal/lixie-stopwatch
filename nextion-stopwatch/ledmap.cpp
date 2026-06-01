@@ -12,22 +12,22 @@ CRGB leds[LED_NUM];
 // matrix — adjust per board if a particular segment is dark.
 static const uint8_t ledIndex[6][10] = {
     //matrix1 deiatky hodin
-    { 9,  0,  8,  1,  7,  2,  6,  3,  5,  4},
+    { 1,0,8,9,11,10,18,19,21,20},
     //matrix1 jednotky hodin
-    {19, 10, 18, 11, 17, 12, 16, 13, 15, 14},
+    {4,3,5,6,14,13,15,16,24,23},
     //matrix2 deiatky minut
-    {31, 25, 33, 26, 32, 27, 31, 28, 30, 29},
+    {26,25,33,34,36,35,43,44,46,45},
     //matrix2 jednotky minut
-    {44, 35, 43, 36, 42, 37, 41, 38, 46, 39},
+    {29,28,30,31,39,38,40,41,49,48},
     //matrix3 desiatky sekund
-    {59, 50, 58, 51, 57, 52, 56, 53, 55, 54},
+    {51,50,58,59,61,60,68,69,71,70},
     //matrix3 jednotky sekund
-    {69, 60, 68, 61, 67, 62, 66, 63, 65, 64}
+    {54,53,55,56,64,63,65,66,74,73}
 };
 
 static bool          colonLeftState  = false;
 static bool          colonRightState = false;
-static CRGB          colonColor      = CRGB(255, 80, 0);
+static CRGB          colonColor      = CRGB(0, 255, 0);
 static unsigned long lastBlink       = 0;
 static bool          blinkEnabled    = false;
 static unsigned long blinkInterval   = 1000;
@@ -49,7 +49,7 @@ void setLedBrightness(uint8_t b) {
 }
 
 void showDigits(int d0, int d1, int d2, int d3, int d4, int d5, CRGB color) {
-    for (int i = 0; i < 70; i++) leds[i] = CRGB::Black;
+    for (int i = 0; i < 75; i++) leds[i] = CRGB::Black;
 
     int d[6] = {d0, d1, d2, d3, d4, d5};
     for (int p = 0; p < 6; p++) {
@@ -71,10 +71,26 @@ void setColons(bool leftOn, bool rightOn, CRGB color) {
     FastLED.show();
 }
 
+void setColonColor(CRGB color) {
+    colonColor = color;
+    // Ak práve blikáme, necháme blikanie pokračovať s novou farbou
+    if (blinkEnabled) {
+        // Aktuálny stav dvojbodiek prekreslíme s novou farbou
+        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
+        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
+        FastLED.show();
+    } else {
+        // Ak nebliká, nastavíme trvalý stav podľa aktuálnych colonLeftState/RightState
+        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
+        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
+        FastLED.show();
+    }
+}
+
 void setColonBlink(bool enabled, unsigned long intervalMs) {
-    blinkEnabled  = enabled;
+    blinkEnabled = enabled;
     blinkInterval = intervalMs;
-    lastBlink     = millis();
+    lastBlink = millis();
 }
 
 void updateColonBlink() {

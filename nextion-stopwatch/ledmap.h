@@ -26,5 +26,6 @@ void showDigits(int d0, int d1, int d2, int d3, int d4, int d5, CRGB color);
 void setColons(bool leftOn, bool rightOn, CRGB color);
 void setColonBlink(bool enabled, unsigned long intervalMs);
 void updateColonBlink();
+void setColonColor(CRGB color);
 
 #endif

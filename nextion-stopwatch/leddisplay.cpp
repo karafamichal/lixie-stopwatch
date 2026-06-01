@@ -30,6 +30,7 @@ static void pushTime(uint32_t totalSec) {
 void begin() {
     initLeds();
     setColonBlink(true, 1000);
+    setColonColor(CRGB(255, 80, 0));
     sMode = MODE_CLOCK;
     sLastSec = 0xFFFFFFFF;
 }
@@ -39,6 +40,7 @@ void startStopwatch(uint32_t startMs, CRGB color) {
     sStartMs = startMs;
     sColor   = color;
     sLastSec = 0xFFFFFFFF;
+    setColonColor(sColor); 
 }
 
 void holdDuration(uint32_t totalSeconds, CRGB color) {
@@ -46,12 +48,14 @@ void holdDuration(uint32_t totalSeconds, CRGB color) {
     sHoldSeconds = totalSeconds;
     sColor       = color;
     sLastSec     = 0xFFFFFFFF;
+    setColonColor(sColor);
 }
 
 void clockMode() {
     sMode    = MODE_CLOCK;
     sColor   = sClockColor;
     sLastSec = 0xFFFFFFFF;
+    setColonColor(sColor);
 }
 
 void setClockColor(CRGB c) {

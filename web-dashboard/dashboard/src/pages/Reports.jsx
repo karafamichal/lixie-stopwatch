@@ -63,8 +63,8 @@ function EurosTooltip({ active, payload, label }) {
 
 function Section({ title, children }) {
   return (
-    <div className="card p-5">
-      <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">{title}</h2>
+    <div className="card p-4 sm:p-5">
+      <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 sm:mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -134,11 +134,11 @@ export default function Reports() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-slate-100 mb-6">Reports</h1>
+      <h1 className="page-title mb-5 md:mb-6">Reports</h1>
 
       {/* Controls */}
-      <div className="flex flex-wrap gap-3 items-end mb-6">
-        <div className="flex gap-1">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end mb-5 md:mb-6">
+        <div className="flex gap-1 flex-wrap">
           {PRESETS.map(p => (
             <button
               key={p.label}
@@ -149,16 +149,15 @@ export default function Reports() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <input type="date" className="input w-36" value={from} max={to} onChange={e => setFrom(e.target.value)} />
-          <span className="text-slate-600 text-sm">→</span>
-          <input type="date" className="input w-36" value={to} min={from} max={today} onChange={e => setTo(e.target.value)} />
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+          <input type="date" className="input sm:w-36" value={from} max={to} onChange={e => setFrom(e.target.value)} />
+          <input type="date" className="input sm:w-36" value={to} min={from} max={today} onChange={e => setTo(e.target.value)} />
         </div>
-        <select className="input w-44" value={clientId} onChange={e => setClientId(e.target.value)}>
+        <select className="input sm:w-44" value={clientId} onChange={e => setClientId(e.target.value)}>
           <option value="">All Clients</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <div className="ml-auto flex items-center gap-4 text-sm">
+        <div className="sm:ml-auto flex items-center gap-4 text-sm">
           {loading ? (
             <span className="text-slate-500">Loading…</span>
           ) : (
@@ -227,32 +226,34 @@ export default function Reports() {
             {byApp.length === 0 ? (
               <p className="text-slate-500 text-sm py-8 text-center">No data.</p>
             ) : (
-              <div className="flex gap-4 items-center">
-                <ResponsiveContainer width="50%" height={180}>
-                  <PieChart>
-                    <Pie
-                      data={byApp}
-                      dataKey="seconds"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={48}
-                      outerRadius={72}
-                      paddingAngle={2}
-                    >
-                      {byApp.map((r, i) => (
-                        <Cell key={i} fill={r.color || '#f59e0b'} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(v, n) => [fmtDuration(v), n]}
-                      contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
-                      labelStyle={{ display: 'none' }}
-                      itemStyle={{ color: '#f1f5f9' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <ul className="flex-1 space-y-1 text-sm overflow-y-auto max-h-44">
+              <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+                <div className="w-full sm:w-1/2">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie
+                        data={byApp}
+                        dataKey="seconds"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={48}
+                        outerRadius={72}
+                        paddingAngle={2}
+                      >
+                        {byApp.map((r, i) => (
+                          <Cell key={i} fill={r.color || '#f59e0b'} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v, n) => [fmtDuration(v), n]}
+                        contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
+                        labelStyle={{ display: 'none' }}
+                        itemStyle={{ color: '#f1f5f9' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <ul className="flex-1 space-y-1 text-sm sm:overflow-y-auto sm:max-h-44">
                   {byApp.slice(0, 10).map((r, i) => (
                     <li key={i} className="flex items-center gap-2">
                       <span className="text-base leading-none">{r.icon}</span>
@@ -299,40 +300,44 @@ export default function Reports() {
           </Section>
         )}
 
-        {/* By project table */}
+        {/* By project list */}
         <Section title="By project">
           {byProject.length === 0 ? (
             <p className="text-slate-500 text-sm py-6 text-center">No data.</p>
           ) : (() => {
             const max = byProject[0]?.seconds || 1;
             return (
-              <div className="space-y-2">
+              <div className="space-y-3 sm:space-y-2">
                 {byProject.map((r, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color || '#f59e0b' }} />
-                    <div className="w-28 text-xs text-slate-400 truncate flex-shrink-0">{r.client_name}</div>
-                    <div className="flex-1 text-sm text-slate-200 truncate flex items-center gap-1.5">
-                      {r.name}
-                      {r.completed && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-xs bg-emerald-900/60 text-emerald-400 border border-emerald-700/40 flex-shrink-0">✓</span>
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                    <div className="flex items-center gap-2 sm:contents min-w-0">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color || '#f59e0b' }} />
+                      <div className="sm:w-28 text-xs text-slate-400 truncate flex-shrink-0">{r.client_name}</div>
+                      <div className="flex-1 text-sm text-slate-200 truncate flex items-center gap-1.5">
+                        {r.name}
+                        {r.completed && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0 rounded text-xs bg-emerald-900/60 text-emerald-400 border border-emerald-700/40 flex-shrink-0">✓</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 sm:contents">
+                      <div className="flex-1 sm:flex-none sm:w-32 bg-slate-800 rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full"
+                          style={{ width: `${(r.seconds / max) * 100}%`, backgroundColor: r.color || '#f59e0b' }}
+                        />
+                      </div>
+                      <div className="sm:w-14 text-right text-xs font-mono text-amber-400 flex-shrink-0">
+                        {fmtDuration(r.seconds)}
+                      </div>
+                      {r.earnings > 0 ? (
+                        <div className="sm:w-20 text-right text-xs font-mono text-green-400 flex-shrink-0">
+                          €{r.earnings.toFixed(2)}
+                        </div>
+                      ) : (
+                        <div className="hidden sm:block sm:w-20 flex-shrink-0" />
                       )}
                     </div>
-                    <div className="w-32 bg-slate-800 rounded-full h-1.5 flex-shrink-0">
-                      <div
-                        className="h-1.5 rounded-full"
-                        style={{ width: `${(r.seconds / max) * 100}%`, backgroundColor: r.color || '#f59e0b' }}
-                      />
-                    </div>
-                    <div className="w-14 text-right text-xs font-mono text-amber-400 flex-shrink-0">
-                      {fmtDuration(r.seconds)}
-                    </div>
-                    {r.earnings > 0 ? (
-                      <div className="w-20 text-right text-xs font-mono text-green-400 flex-shrink-0">
-                        €{r.earnings.toFixed(2)}
-                      </div>
-                    ) : (
-                      <div className="w-20 flex-shrink-0" />
-                    )}
                   </div>
                 ))}
               </div>

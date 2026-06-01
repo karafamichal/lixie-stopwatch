@@ -132,27 +132,27 @@ export default function Homepage() {
   return (
     <div>
       {/* ── hero ─────────────────────────────────────────────────────────── */}
-      <div className="nixie-hero rounded-2xl p-8 mb-8 relative overflow-hidden">
+      <div className="nixie-hero rounded-2xl p-5 sm:p-6 md:p-8 mb-5 md:mb-8 relative overflow-hidden">
         <div className="absolute inset-0 bg-black/30" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-4xl drop-shadow">⏱</span>
+            <span className="text-3xl md:text-4xl drop-shadow">⏱</span>
             <div>
-              <p className="text-2xl font-bold text-white tracking-wide uppercase leading-tight drop-shadow">Lixie Stopky</p>
-              <p className="text-amber-200/70 text-sm tracking-widest uppercase">Time Tracking Dashboard</p>
+              <p className="text-xl md:text-2xl font-bold text-white tracking-wide uppercase leading-tight drop-shadow">Lixie Stopky</p>
+              <p className="text-amber-200/70 text-xs md:text-sm tracking-widest uppercase">Time Tracking Dashboard</p>
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-5 md:mt-6">
             <button
               onClick={openClientModal}
-              className="flex items-center gap-2 bg-white/15 hover:bg-white/25 border border-white/20 text-white text-sm font-semibold px-4 py-2 rounded-lg backdrop-blur-sm transition-all"
+              className="inline-flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 border border-white/20 text-white text-sm font-semibold px-4 py-2.5 rounded-lg backdrop-blur-sm transition-all"
             >
               <Plus className="w-4 h-4" /> New Client
             </button>
             <button
               onClick={openProjectModal}
-              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 text-sm font-semibold px-4 py-2 rounded-lg transition-all"
+              className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 text-sm font-semibold px-4 py-2.5 rounded-lg transition-all"
             >
               <Plus className="w-4 h-4" /> New Project
             </button>
@@ -168,21 +168,21 @@ export default function Homepage() {
       <LiveSessions />
 
       {/* ── time summaries ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 mb-5 md:mb-6">
         {[
           { label: 'This week', value: fmtSecs(st?.week_seconds), sub: `${st?.week_seconds ? (st.week_seconds / 3600).toFixed(1) : 0} hours tracked` },
           { label: 'This month', value: fmtSecs(st?.month_seconds), sub: `${st?.month_seconds ? (st.month_seconds / 3600).toFixed(1) : 0} hours tracked` },
         ].map(({ label, value, sub }) => (
-          <div key={label} className="card p-5">
-            <p className="text-2xl font-bold text-amber-400">{value}</p>
+          <div key={label} className="card p-4 md:p-5">
+            <p className="text-xl md:text-2xl font-bold text-amber-400">{value}</p>
             <p className="text-sm text-slate-300 mt-0.5">{label}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
+            <p className="text-xs text-slate-500 mt-0.5 truncate">{sub}</p>
           </div>
         ))}
       </div>
 
       {/* ── shortcuts grid ────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6 md:mb-8">
         <ShortcutCard to="/clients"  icon={Users}        label="Clients"   count={st?.clients}   color="#f59e0b" />
         <ShortcutCard to="/projects" icon={FolderKanban} label="Projects"  count={st?.projects}  color="#60a5fa" />
         <ShortcutCard to="/apps"     icon={AppWindow}    label="Pricing"   count={st?.apps}      color="#a78bfa" />
@@ -193,43 +193,69 @@ export default function Homepage() {
 
       {/* ── recent logs ───────────────────────────────────────────────────── */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-700 flex justify-between items-center">
+        <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-700 flex justify-between items-center">
           <h2 className="text-sm font-semibold text-slate-300">Recent Time Logs</h2>
           <Link to="/timelogs" className="text-xs text-amber-400 hover:text-amber-300 transition-colors">View all →</Link>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-slate-800/60">
-              <th className="th">Device</th>
-              <th className="th">Client</th>
-              <th className="th">Project</th>
-              <th className="th">App</th>
-              <th className="th">Duration</th>
-              <th className="th">Started</th>
-              <th className="th">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 ? (
-              <tr><td colSpan={7} className="td text-center text-slate-500 py-10">No time logs yet</td></tr>
-            ) : logs.map(l => (
-              <tr key={l.id} className="tr">
-                <td className="td text-sm text-slate-400">{l.device_label || l.hardware_id || '–'}</td>
-                <td className="td text-sm text-slate-200">{l.client_name}</td>
-                <td className="td text-sm text-slate-400">{l.project_name}</td>
-                <td className="td text-sm text-slate-400">
-                  {l.app_icon && <span className="mr-1">{l.app_icon}</span>}
-                  {l.app_name || <span className="text-slate-600">–</span>}
-                </td>
-                <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
-                <td className="td text-sm text-slate-500">{fmtDateTime(l.start_timestamp)}</td>
-                <td className="td">
-                  <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>{l.status}</span>
-                </td>
+
+        {/* Desktop: table */}
+        <div className="hidden md:block">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-slate-800/60">
+                <th className="th">Device</th>
+                <th className="th">Client</th>
+                <th className="th">Project</th>
+                <th className="th">App</th>
+                <th className="th">Duration</th>
+                <th className="th">Started</th>
+                <th className="th">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {logs.length === 0 ? (
+                <tr><td colSpan={7} className="td text-center text-slate-500 py-10">No time logs yet</td></tr>
+              ) : logs.map(l => (
+                <tr key={l.id} className="tr">
+                  <td className="td text-sm text-slate-400">{l.device_label || l.hardware_id || '–'}</td>
+                  <td className="td text-sm text-slate-200">{l.client_name}</td>
+                  <td className="td text-sm text-slate-400">{l.project_name}</td>
+                  <td className="td text-sm text-slate-400">
+                    {l.app_icon && <span className="mr-1">{l.app_icon}</span>}
+                    {l.app_name || <span className="text-slate-600">–</span>}
+                  </td>
+                  <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
+                  <td className="td text-sm text-slate-500">{fmtDateTime(l.start_timestamp)}</td>
+                  <td className="td">
+                    <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>{l.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: stacked cards */}
+        <div className="md:hidden divide-y divide-slate-700">
+          {logs.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-500">No time logs yet</p>
+          ) : logs.map(l => (
+            <div key={l.id} className="px-4 py-3 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-slate-200 truncate">{l.client_name}</span>
+                <span className="text-sm font-mono text-amber-400 flex-shrink-0">{fmtDuration(l.duration_seconds)}</span>
+              </div>
+              <div className="text-xs text-slate-400 truncate">{l.project_name}</div>
+              <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                <span className="truncate">
+                  {l.app_icon && <span className="mr-1">{l.app_icon}</span>}
+                  {l.app_name || '—'} · {fmtDateTime(l.start_timestamp)}
+                </span>
+                <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>{l.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── quick create client modal ─────────────────────────────────────── */}

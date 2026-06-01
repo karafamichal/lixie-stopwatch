@@ -99,26 +99,26 @@ export default function Apps() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Pricing</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="page-title">Pricing</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             {activeCount} active · {apps.length} total · {customCount} custom
           </p>
         </div>
-        <button className="btn-primary" onClick={openCreate}>
+        <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
           <Plus className="w-4 h-4" /> Add Custom App
         </button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        <div className="flex gap-1 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-5">
+        <div className="flex gap-1 flex-wrap order-2 sm:order-1">
           {categories.map(cat => (
             <button
               key={cat}
               onClick={() => setFilterCat(cat)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filterCat === cat
                   ? 'bg-amber-500 text-slate-900'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
@@ -129,7 +129,7 @@ export default function Apps() {
           ))}
         </div>
         <input
-          className="input w-44 ml-auto"
+          className="input sm:w-44 sm:ml-auto order-1 sm:order-2"
           placeholder="Search apps…"
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -141,13 +141,15 @@ export default function Apps() {
       ) : visible.length === 0 ? (
         <div className="text-center text-slate-500 py-16">No apps match your filter.</div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           {sortedCats.map(cat => (
             <div key={cat} className="card overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-700/40 border-b border-slate-700">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{cat}</span>
               </div>
-              <table className="w-full">
+
+              {/* Desktop: table */}
+              <table className="hidden md:table w-full">
                 <tbody>
                   {grouped[cat].map(a => (
                     <tr key={a.id} className={`tr ${!a.active ? 'opacity-40' : ''}`}>
@@ -200,6 +202,54 @@ export default function Apps() {
                   ))}
                 </tbody>
               </table>
+
+              {/* Mobile: stacked rows inside the category card */}
+              <div className="md:hidden divide-y divide-slate-700/60">
+                {grouped[cat].map(a => (
+                  <div
+                    key={a.id}
+                    className={`px-3 py-3 flex items-center gap-3 ${!a.active ? 'opacity-40' : ''}`}
+                    style={{ borderLeftColor: a.color, borderLeftWidth: 3 }}
+                  >
+                    {a.logo
+                      ? <img src={a.logo} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+                      : <span className="text-2xl leading-none flex-shrink-0 w-9 text-center">{a.icon}</span>
+                    }
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100 truncate">{a.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {a.hourly_rate != null ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                            €{a.hourly_rate}/h
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-600 italic">no rate</span>
+                        )}
+                        {a.is_builtin && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-700 text-slate-400">
+                            <Lock className="w-2.5 h-2.5" /> Built-in
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-0.5 flex-shrink-0">
+                      <button className="icon-btn" title={a.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(a)}>
+                        {a.active
+                          ? <ToggleRight className="w-5 h-5 text-green-400" />
+                          : <ToggleLeft className="w-5 h-5" />}
+                      </button>
+                      <button className="icon-btn" title="Edit" onClick={() => openEdit(a)}>
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      {!a.is_builtin && (
+                        <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(a)}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -214,7 +264,7 @@ export default function Apps() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {!editTarget?.is_builtin && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">App Name</label>
                   <input

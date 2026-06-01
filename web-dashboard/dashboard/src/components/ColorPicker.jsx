@@ -23,7 +23,7 @@ export default function ColorPicker({ value = '#FF8000', onChange }) {
   return (
     <div className="space-y-3">
       {/* Preset swatches */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {PRESETS.map(({ hex, label }) => {
           const active = normalized === hex.toUpperCase();
           return (
@@ -32,7 +32,7 @@ export default function ColorPicker({ value = '#FF8000', onChange }) {
               type="button"
               title={label}
               onClick={() => onChange(hex)}
-              className={`w-7 h-7 rounded-lg transition-all hover:scale-110 ${
+              className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg transition-all hover:scale-110 ${
                 active ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110' : ''
               }`}
               style={{ backgroundColor: hex }}
@@ -47,7 +47,7 @@ export default function ColorPicker({ value = '#FF8000', onChange }) {
           type="color"
           value={value}
           onChange={e => onChange(e.target.value.toUpperCase())}
-          className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0"
+          className="w-10 h-10 sm:w-8 sm:h-8 rounded cursor-pointer border-0 bg-transparent p-0"
           title="Custom colour"
         />
         <span className="text-xs text-slate-500">Custom</span>

@@ -9,23 +9,50 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
     return () => document.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const widths = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl' };
+  const widths = {
+    sm: 'sm:max-w-sm',
+    md: 'sm:max-w-md',
+    lg: 'sm:max-w-lg',
+    xl: 'sm:max-w-xl',
+  };
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+      // Phones: bottom sheet (items-end). sm+: centred dialog.
+      className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className={`card w-full ${widths[size]} shadow-2xl flex flex-col max-h-[90vh]`}>
-        <div className="flex justify-between items-center px-5 py-4 border-b border-slate-700 flex-shrink-0">
+      <div
+        className={
+          `card w-full ${widths[size]} shadow-2xl flex flex-col ` +
+          // Phone: full-width sheet, rounded top corners only.
+          `rounded-b-none rounded-t-2xl sm:rounded-xl ` +
+          // Cap height so the inner area scrolls instead of the page.
+          `max-h-[92vh] sm:max-h-[88vh]`
+        }
+      >
+        <div className="flex justify-between items-center px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-700 flex-shrink-0">
           <h2 className="text-base font-semibold text-slate-100">{title}</h2>
-          <button onClick={onClose} className="icon-btn">
-            <X className="w-4 h-4" />
+          <button
+            onClick={onClose}
+            className="p-2 -mr-2 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-5 py-5 overflow-y-auto">{children}</div>
+        <div className="px-4 sm:px-5 py-4 sm:py-5 overflow-y-auto pb-[max(env(safe-area-inset-bottom),1rem)]">
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -193,35 +193,36 @@ export default function TimeLogs() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Time Logs</h1>
-        <button className="btn-primary" onClick={openCreate}>
+      <div className="page-header">
+        <h1 className="page-title">Time Logs</h1>
+        <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
           <Plus className="w-4 h-4" /> Add Entry
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        <select className="input w-40" value={filters.client_id} onChange={e => setFilter('client_id', e.target.value)}>
+      {/* Filters — stack on phone, wrap on desktop. */}
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 sm:gap-3 mb-5">
+        <select className="input sm:w-40 col-span-2 sm:col-span-1" value={filters.client_id} onChange={e => setFilter('client_id', e.target.value)}>
           <option value="">All Clients</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select className="input w-44" value={filters.project_id} onChange={e => setFilter('project_id', e.target.value)} disabled={!filters.client_id}>
+        <select className="input sm:w-44 col-span-2 sm:col-span-1" value={filters.project_id} onChange={e => setFilter('project_id', e.target.value)} disabled={!filters.client_id}>
           <option value="">All Projects</option>
           {filterProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <select className="input w-44" value={filters.app_id} onChange={e => setFilter('app_id', e.target.value)}>
+        <select className="input sm:w-44 col-span-2 sm:col-span-1" value={filters.app_id} onChange={e => setFilter('app_id', e.target.value)}>
           <option value="">All Apps</option>
           {allApps.map(a => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
         </select>
-        <input type="date" className="input w-36" value={filters.from} onChange={e => setFilter('from', e.target.value)} title="From date" />
-        <input type="date" className="input w-36" value={filters.to} onChange={e => setFilter('to', e.target.value)} title="To date" />
-        <button className="btn-ghost text-xs" onClick={() => setFilters({ client_id: '', project_id: '', app_id: '', from: '', to: '' })}>
+        <input type="date" className="input sm:w-36" value={filters.from} onChange={e => setFilter('from', e.target.value)} title="From date" />
+        <input type="date" className="input sm:w-36" value={filters.to} onChange={e => setFilter('to', e.target.value)} title="To date" />
+        <button className="btn-ghost text-xs col-span-2 sm:col-span-1" onClick={() => setFilters({ client_id: '', project_id: '', app_id: '', from: '', to: '' })}>
           Clear
         </button>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Desktop: table */}
+      <div className="hidden md:block card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-slate-800/60">
@@ -275,9 +276,54 @@ export default function TimeLogs() {
         </table>
       </div>
 
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <p className="text-center text-slate-500 py-10">Loading…</p>
+        ) : logs.length === 0 ? (
+          <p className="text-center text-slate-500 py-10">No time logs found.</p>
+        ) : logs.map(l => (
+          <div key={l.id} className="card p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-100 truncate">{l.client_name}</p>
+                <p className="text-xs text-slate-400 truncate">{l.project_name}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</p>
+                <p className="text-[11px] text-slate-500">{fmtDateTime(l.start_timestamp)}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2 min-w-0">
+                {l.app_icon && <span>{l.app_icon}</span>}
+                <span className="truncate">
+                  {l.app_name || '—'}
+                  {l.device_label || l.hardware_id ? ` · ${l.device_label || l.hardware_id}` : ''}
+                </span>
+              </div>
+              <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>
+                {l.status}
+              </span>
+            </div>
+            {l.notes && (
+              <p className="text-xs text-slate-500 mt-2 line-clamp-2">{l.notes}</p>
+            )}
+            <div className="flex justify-end gap-1 mt-2 -mb-1">
+              <button className="icon-btn" title="Edit" onClick={() => openEdit(l)}>
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(l)}>
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Edit Time Log' : 'Add Time Log'} size="xl">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Client</label>
               <select
@@ -338,7 +384,7 @@ export default function TimeLogs() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Start time</label>
                 <input

@@ -16,32 +16,36 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-slate-950 text-slate-100 antialiased;
+    /* Avoid Safari zoom on focused inputs (<16px triggers zoom). */
+    -webkit-text-size-adjust: 100%;
   }
-  ::-webkit-scrollbar {
-    @apply w-1.5;
+  /* On touch devices, scrollbars are intrusive; on desktop they're useful. */
+  @media (pointer: fine) {
+    ::-webkit-scrollbar { @apply w-1.5; }
+    ::-webkit-scrollbar-track { @apply bg-slate-900; }
+    ::-webkit-scrollbar-thumb { @apply bg-slate-600 rounded-full; }
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-slate-900;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-slate-600 rounded-full;
+  /* All text inputs use 16px on mobile to suppress iOS auto-zoom. */
+  input, select, textarea { font-size: 16px; }
+  @media (min-width: 768px) {
+    input, select, textarea { font-size: 14px; }
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply flex items-center gap-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-900 font-semibold px-4 py-2 rounded-lg transition-colors text-sm;
+    @apply inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-900 font-semibold px-4 py-2.5 md:py-2 rounded-lg transition-colors text-sm min-h-[40px];
   }
   .btn-ghost {
-    @apply px-4 py-2 text-slate-400 hover:text-slate-100 text-sm transition-colors;
+    @apply inline-flex items-center justify-center px-4 py-2.5 md:py-2 text-slate-400 hover:text-slate-100 text-sm transition-colors min-h-[40px];
   }
   .btn-danger {
-    @apply px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors text-sm;
+    @apply inline-flex items-center justify-center px-4 py-2.5 md:py-2 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors text-sm min-h-[40px];
   }
   .input {
-    @apply w-full bg-slate-700 border border-slate-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent;
+    @apply w-full bg-slate-700 border border-slate-600 text-slate-100 placeholder-slate-500 rounded-lg px-3 py-2.5 md:py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent;
   }
   .label {
     @apply block text-sm font-medium text-slate-300 mb-1;
@@ -71,9 +75,28 @@
     @apply border-t border-slate-700 hover:bg-slate-700/30 transition-colors;
   }
   .icon-btn {
-    @apply p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition-colors;
+    @apply p-2 md:p-1.5 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition-colors;
   }
   .icon-btn-danger {
-    @apply p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors;
+    @apply p-2 md:p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-slate-700 transition-colors;
+  }
+  /* Page header: title + primary action. Stacks on phone, row on tablet+. */
+  .page-header {
+    @apply flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5 md:mb-6;
+  }
+  .page-title {
+    @apply text-xl md:text-2xl font-bold text-slate-100;
+  }
+  /* List-row card used on mobile in place of <tr>. */
+  .row-card {
+    @apply card p-3 sm:p-4 flex flex-col gap-2;
+  }
+  /* Wrap tables that we keep on desktop so they horizontally scroll if forced
+     to render on a narrow viewport. */
+  .table-scroll {
+    @apply card overflow-hidden;
+  }
+  .table-scroll > table {
+    @apply w-full;
   }
 }

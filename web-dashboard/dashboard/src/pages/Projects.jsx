@@ -101,23 +101,54 @@ export default function Projects() {
     load();
   };
 
+  const renderActions = (p) => (
+    <div className="flex justify-end gap-1">
+      {p.completed ? (
+        <>
+          <button className="icon-btn" title="View billing" onClick={() => openBilling(p)}>
+            <Receipt className="w-4 h-4 text-amber-400" />
+          </button>
+          <button
+            className="icon-btn text-xs px-2 py-1 h-auto"
+            title="Reopen project"
+            onClick={() => handleReopen(p)}
+          >
+            Reopen
+          </button>
+        </>
+      ) : (
+        <>
+          <button className="icon-btn" title={p.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(p)}>
+            {p.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
+          </button>
+          <button className="icon-btn" title="Mark as completed" onClick={() => openBilling(p)}>
+            <CheckCircle className="w-4 h-4" />
+          </button>
+        </>
+      )}
+      <button className="icon-btn" title="Edit" onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></button>
+      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(p)}><Trash2 className="w-4 h-4" /></button>
+    </div>
+  );
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Projects</h1>
-        <button className="btn-primary" onClick={openCreate}>
+      <div className="page-header">
+        <h1 className="page-title">Projects</h1>
+        <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
           <Plus className="w-4 h-4" /> Add Project
         </button>
       </div>
 
       <div className="mb-4">
-        <select className="input w-52" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
+        <select className="input sm:w-52" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
           <option value="">All Clients</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Desktop: table */}
+      <div className="hidden md:block card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-slate-800/60">
@@ -168,39 +199,53 @@ export default function Projects() {
                     ? new Date(p.completed_at).toLocaleDateString()
                     : new Date(p.created_at).toLocaleDateString()}
                 </td>
-                <td className="td">
-                  <div className="flex justify-end gap-1">
-                    {p.completed ? (
-                      <>
-                        <button className="icon-btn" title="View billing" onClick={() => openBilling(p)}>
-                          <Receipt className="w-4 h-4 text-amber-400" />
-                        </button>
-                        <button
-                          className="icon-btn text-xs px-2 py-1 h-auto"
-                          title="Reopen project"
-                          onClick={() => handleReopen(p)}
-                        >
-                          Reopen
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="icon-btn" title={p.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(p)}>
-                          {p.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
-                        </button>
-                        <button className="icon-btn" title="Mark as completed" onClick={() => openBilling(p)}>
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                    <button className="icon-btn" title="Edit" onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></button>
-                    <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(p)}><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </td>
+                <td className="td">{renderActions(p)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <p className="text-center text-slate-500 py-10">Loading…</p>
+        ) : projects.length === 0 ? (
+          <p className="text-center text-slate-500 py-10">No projects found.</p>
+        ) : projects.map(p => (
+          <div
+            key={p.id}
+            className={`card overflow-hidden ${p.completed ? 'opacity-60' : ''}`}
+            style={{ borderLeftColor: p.color || '#FF8000', borderLeftWidth: 4 }}
+          >
+            <div className="p-3 sm:p-4 flex items-center gap-3">
+              <Avatar project={p} />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-100 truncate">{p.name}</p>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 truncate">
+                  {p.client_logo
+                    ? <img src={p.client_logo} alt="" className="w-4 h-4 rounded object-cover flex-shrink-0" />
+                    : <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: p.client_color || '#FF8000' }} />}
+                  <span className="truncate">{p.client_name}</span>
+                </div>
+              </div>
+              <div className="flex-shrink-0">
+                {p.completed ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/60 text-emerald-400 border border-emerald-700/40">
+                    <CheckCircle className="w-3 h-3" /> Done
+                  </span>
+                ) : (
+                  <span className={p.active ? 'badge-active' : 'badge-inactive'}>
+                    {p.active ? 'Active' : 'Inactive'}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="px-2 sm:px-3 pb-2 border-t border-slate-700/60 pt-2">
+              {renderActions(p)}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Edit / Create modal */}
@@ -253,45 +298,49 @@ export default function Projects() {
             {billingData.breakdown.length === 0 ? (
               <p className="text-slate-500 text-sm text-center py-4">No time logs recorded for this project yet.</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">App</th>
-                    <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Hours</th>
-                    <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Rate</th>
-                    <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Earned</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {billingData.breakdown.map((row, i) => (
-                    <tr key={i} className="border-b border-slate-700/50">
-                      <td className="py-2.5 flex items-center gap-2">
-                        <span className="text-base leading-none">{row.app_icon}</span>
-                        <span className="text-slate-200">{row.app_name}</span>
-                      </td>
-                      <td className="py-2.5 text-right font-mono text-slate-400">
-                        {fmtDuration(row.seconds)}
-                      </td>
-                      <td className="py-2.5 text-right font-mono text-slate-500">
-                        {row.hourly_rate != null ? `€${row.hourly_rate}/h` : '–'}
-                      </td>
-                      <td className="py-2.5 text-right font-mono text-amber-400 font-semibold">
-                        {row.earnings > 0 ? `€${row.earnings.toFixed(2)}` : '–'}
-                      </td>
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-sm min-w-[420px]">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="text-left py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">App</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Hours</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Rate</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Earned</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {billingData.breakdown.map((row, i) => (
+                      <tr key={i} className="border-b border-slate-700/50">
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base leading-none">{row.app_icon}</span>
+                            <span className="text-slate-200 truncate">{row.app_name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-right font-mono text-slate-400 whitespace-nowrap pl-2">
+                          {fmtDuration(row.seconds)}
+                        </td>
+                        <td className="py-2.5 text-right font-mono text-slate-500 whitespace-nowrap pl-2">
+                          {row.hourly_rate != null ? `€${row.hourly_rate}/h` : '–'}
+                        </td>
+                        <td className="py-2.5 text-right font-mono text-amber-400 font-semibold whitespace-nowrap pl-2">
+                          {row.earnings > 0 ? `€${row.earnings.toFixed(2)}` : '–'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-600">
-              <div>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-600 gap-3">
+              <div className="min-w-0">
                 <p className="text-xs text-slate-500">Total time tracked</p>
-                <p className="text-lg font-bold text-slate-200 font-mono">{fmtDuration(billingData.total_seconds)}</p>
+                <p className="text-base sm:text-lg font-bold text-slate-200 font-mono">{fmtDuration(billingData.total_seconds)}</p>
               </div>
-              <div className="text-right">
+              <div className="text-right min-w-0">
                 <p className="text-xs text-slate-500">Total earnings</p>
-                <p className="text-2xl font-bold text-amber-400">€{billingData.total_earnings.toFixed(2)}</p>
+                <p className="text-xl sm:text-2xl font-bold text-amber-400">€{billingData.total_earnings.toFixed(2)}</p>
               </div>
             </div>
 

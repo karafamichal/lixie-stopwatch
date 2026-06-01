@@ -98,14 +98,31 @@ export default function Devices() {
     }
   };
 
+  const deviceActions = (d) => (
+    <div className="flex justify-end gap-1">
+      <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
+        <Palette className="w-4 h-4" />
+      </button>
+      <button className="icon-btn" title="Edit label" onClick={() => openEdit(d)}>
+        <Pencil className="w-4 h-4" />
+      </button>
+      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(d)}>
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Devices</h1>
-        <p className="text-sm text-slate-500">Devices register automatically on first time log submission</p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Devices</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Devices register automatically on first time log submission</p>
+        </div>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Desktop: table */}
+      <div className="hidden md:block card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-slate-800/60">
@@ -139,24 +156,44 @@ export default function Devices() {
                   <td className="td text-sm text-slate-500">
                     {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
                   </td>
-                  <td className="td">
-                    <div className="flex justify-end gap-1">
-                      <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
-                        <Palette className="w-4 h-4" />
-                      </button>
-                      <button className="icon-btn" title="Edit label" onClick={() => openEdit(d)}>
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(d)}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                  <td className="td">{deviceActions(d)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile: card list */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <p className="text-center text-slate-500 py-10">Loading…</p>
+        ) : devices.length === 0 ? (
+          <p className="text-center text-slate-500 py-10">No devices yet.</p>
+        ) : devices.map(d => {
+          const online = isOnline(d.last_seen);
+          return (
+            <div key={d.id} className="card p-3 sm:p-4">
+              <div className="flex items-center gap-3 mb-2">
+                {online
+                  ? <Wifi className="w-5 h-5 text-green-400 flex-shrink-0" title="Online" />
+                  : <WifiOff className="w-5 h-5 text-slate-600 flex-shrink-0" title="Offline" />}
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-sm text-amber-400 truncate">{d.hardware_id}</p>
+                  <p className="text-xs text-slate-400 truncate">
+                    {d.label || <span className="text-slate-600 italic">no label</span>}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-2">
+                Last seen: {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
+              </p>
+              <div className="border-t border-slate-700/60 pt-2 -mb-1">
+                {deviceActions(d)}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Device Label" size="sm">

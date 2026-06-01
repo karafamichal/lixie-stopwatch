@@ -581,6 +581,35 @@ def create_app():
             'delivered':   delivered,
         })
 
+    @app.route('/api/v1/devices/<int:did>/remote/touch', methods=['POST'])
+    def device_remote_touch(did):
+        """Forward a synthetic touch event to a connected device.
+
+        Body: { "x": 0..399, "y": 0..239, "pressed": true|false (default true) }
+
+        The device's UI layer treats it identically to a real Nextion touch.
+        Returns {delivered: true|false} — `false` means the device is offline
+        and the touch was dropped (we don't queue these).
+        """
+        device = db.get_or_404(Device, did)
+        data = request.get_json() or {}
+        try:
+            x = int(data['x'])
+            y = int(data['y'])
+        except (KeyError, TypeError, ValueError):
+            abort(400, description="x and y are required integers")
+        if not (0 <= x < 400 and 0 <= y < 240):
+            abort(400, description="x must be 0..399, y must be 0..239")
+        pressed = bool(data.get('pressed', True))
+
+        delivered = _send_to_device(device.hardware_id, {
+            'type':    'remote_touch',
+            'x':       x,
+            'y':       y,
+            'pressed': pressed,
+        })
+        return jsonify({'delivered': delivered})
+
     @app.route('/api/v1/devices/<int:did>', methods=['DELETE'])
     def delete_device(did):
         device = db.get_or_404(Device, did)

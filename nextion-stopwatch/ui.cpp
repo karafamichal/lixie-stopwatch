@@ -853,23 +853,32 @@ void handleTouch(const NextionTouch& t) {
     }
 }
 
+void injectTouch(int x, int y, bool pressed) {
+    NextionTouch t;
+    t.x       = (uint16_t)x;
+    t.y       = (uint16_t)y;
+    t.pressed = pressed;
+    handleTouch(t);
+}
+
 LiveSnapshot getLiveSnapshot() {
     LiveSnapshot s;
     // Safe default — guarantees s.state is never an uninitialized pointer if
     // a new Screen value is added without a matching case below.
-    s.state = "idle";
+    s.state  = "idle";
+    s.screen = "idle";
 
     switch (sScreen) {
-        case SCR_IDLE:            s.state = "idle";       break;
-        case SCR_CLIENT:
-        case SCR_PROJECT:
-        case SCR_APP:             s.state = "selecting";  break;
-        case SCR_RUNNING:         s.state = sPaused ? "paused" : "running"; break;
-        case SCR_CONFIRM:         s.state = "confirm";    break;
-        case SCR_DISCARD_CONFIRM: s.state = "running";    break;   // session still alive
-        case SCR_SETTINGS:        s.state = "idle";       break;
-        case SCR_TOAST:           s.state = "idle";       break;
-        case SCR_BOOT:            s.state = "boot";       break;
+        case SCR_IDLE:            s.state = "idle";       s.screen = "idle";            break;
+        case SCR_CLIENT:          s.state = "selecting";  s.screen = "client";          break;
+        case SCR_PROJECT:         s.state = "selecting";  s.screen = "project";         break;
+        case SCR_APP:             s.state = "selecting";  s.screen = "app";             break;
+        case SCR_RUNNING:         s.state = sPaused ? "paused" : "running"; s.screen = "running"; break;
+        case SCR_CONFIRM:         s.state = "confirm";    s.screen = "confirm";         break;
+        case SCR_DISCARD_CONFIRM: s.state = "running";    s.screen = "discard_confirm"; break;
+        case SCR_SETTINGS:        s.state = "idle";       s.screen = "settings";        break;
+        case SCR_TOAST:           s.state = "idle";       s.screen = "toast";           break;
+        case SCR_BOOT:            s.state = "boot";       s.screen = "boot";            break;
     }
 
     s.clientId    = sSelClient;

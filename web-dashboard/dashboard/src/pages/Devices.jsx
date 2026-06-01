@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Pencil, Trash2, Wifi, WifiOff, Palette } from 'lucide-react';
+import { Pencil, Trash2, Wifi, WifiOff, Palette, MonitorSmartphone } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
+import RemoteDisplay from '../components/RemoteDisplay';
 
 const BRIGHTNESS_LEVELS = [
   { label: 'Low',  value: 30  },
@@ -44,10 +45,13 @@ export default function Devices() {
   const [settingsBusy,   setSettingsBusy]   = useState(false);
   const [settingsFlash,  setSettingsFlash]  = useState('');
 
-  // Live presence — hardware_id -> last-WS-message timestamp (ms).
-  const [liveSeen, setLiveSeen] = useState({});
-  const [now,      setNow]      = useState(Date.now());
+  // Live presence + full last state — hardware_id -> { ...device_state, _ts }.
+  const [liveStates, setLiveStates] = useState({});
+  const [now,        setNow]        = useState(Date.now());
   const wsRef = useRef(null);
+
+  // Remote control modal target.
+  const [remoteTarget, setRemoteTarget] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -66,7 +70,8 @@ export default function Devices() {
   }, []);
 
   // Subscribe to the dashboard WS so every device_state push refreshes our
-  // liveSeen map. Auto-reconnects on close.
+  // liveStates map (used for both online detection AND the remote-control
+  // mirror). Auto-reconnects on close.
   useEffect(() => {
     let closed = false;
     let retryTimer = null;
@@ -82,7 +87,10 @@ export default function Devices() {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'device_state' && msg.hardware_id) {
-            setLiveSeen(s => ({ ...s, [msg.hardware_id]: Date.now() }));
+            setLiveStates(s => ({
+              ...s,
+              [msg.hardware_id]: { ...msg, _ts: Date.now() },
+            }));
           }
         } catch {}
       };
@@ -99,8 +107,8 @@ export default function Devices() {
       .then(r => r.ok ? r.json() : [])
       .then(rows => {
         const seed = {};
-        for (const r of rows) seed[r.hardware_id] = Date.now();
-        setLiveSeen(s => ({ ...seed, ...s }));
+        for (const r of rows) seed[r.hardware_id] = { ...r, _ts: Date.now() };
+        setLiveStates(s => ({ ...seed, ...s }));
       })
       .catch(() => {});
 
@@ -113,11 +121,11 @@ export default function Devices() {
   }, []);
 
   const isOnline = useCallback((d) => {
-    const live = liveSeen[d.hardware_id];
-    if (live && now - live < LIVE_WINDOW_MS) return true;
+    const live = liveStates[d.hardware_id];
+    if (live && now - live._ts < LIVE_WINDOW_MS) return true;
     if (d.last_seen && Date.now() - new Date(d.last_seen).getTime() < RECENT_LAST_SEEN_MS) return true;
     return false;
-  }, [liveSeen, now]);
+  }, [liveStates, now]);
 
   const openEdit = (d) => { setLabel(d.label || ''); setEditTarget(d); };
 
@@ -181,6 +189,14 @@ export default function Devices() {
 
   const deviceActions = (d) => (
     <div className="flex justify-end gap-1">
+      <button
+        className="icon-btn"
+        title="Remote control (mirror the display)"
+        onClick={() => setRemoteTarget(d)}
+        disabled={!isOnline(d)}
+      >
+        <MonitorSmartphone className={`w-4 h-4 ${isOnline(d) ? '' : 'opacity-30'}`} />
+      </button>
       <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
         <Palette className="w-4 h-4" />
       </button>
@@ -385,6 +401,22 @@ export default function Devices() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Remote Control — virtual screen mirror + touch injection */}
+      <Modal
+        isOpen={!!remoteTarget}
+        onClose={() => setRemoteTarget(null)}
+        title={`Remote — ${remoteTarget?.label || remoteTarget?.hardware_id || ''}`}
+        size="xl"
+      >
+        {remoteTarget && (
+          <RemoteDisplay
+            device={remoteTarget}
+            online={isOnline(remoteTarget)}
+            state={liveStates[remoteTarget.hardware_id]}
+          />
+        )}
       </Modal>
     </div>
   );

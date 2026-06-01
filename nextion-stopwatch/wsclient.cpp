@@ -9,7 +9,8 @@
 static WebSocketsClient ws;
 static bool     sConnected     = false;
 static uint32_t sLastPushMs    = 0;
-static const char* sLastStateName = "";   // detect changes for immediate push
+static const char* sLastStateName  = "";   // detect changes for immediate push
+static const char* sLastScreenName = "";   // finer-grained change detection
 
 static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
     switch (type) {
@@ -55,6 +56,17 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
                               Settings::clockColorHex().c_str(),
                               Settings::colonColorHex().c_str(),
                               Settings::brightness());
+            } else if (strcmp(msgType, "remote_touch") == 0) {
+                // Remote control — inject a synthetic touch as if the user
+                // had pressed/released the physical Nextion at (x,y).
+                int  x       = doc["x"]       | -1;
+                int  y       = doc["y"]       | -1;
+                bool pressed = doc["pressed"] | true;
+                if (x >= 0 && y >= 0) {
+                    UI::injectTouch(x, y, pressed);
+                    Serial.printf("[ws] remote touch x=%d y=%d %s\n",
+                                  x, y, pressed ? "down" : "up");
+                }
             }
             break;
         }
@@ -72,6 +84,7 @@ static void pushState() {
     doc["type"]            = "state";
     doc["hardware_id"]     = HARDWARE_ID;
     doc["state"]           = s.state;
+    doc["screen"]          = s.screen;
     doc["paused"]          = s.paused;
     doc["elapsed_seconds"] = s.elapsedSec;
     if (s.clientId >= 0) {
@@ -94,7 +107,8 @@ static void pushState() {
     String body;
     serializeJson(doc, body);
     ws.sendTXT(body);
-    sLastStateName = s.state;
+    sLastStateName  = s.state;
+    sLastScreenName = s.screen;
 }
 
 namespace WsClient {
@@ -119,9 +133,12 @@ void loop() {
     uint32_t interval = isActive ? 1000UL : 5000UL;
 
     uint32_t now = millis();
-    bool stateChanged = (sLastStateName && strcmp(sLastStateName, s.state) != 0);
+    bool stateChanged  = (sLastStateName  && strcmp(sLastStateName,  s.state)  != 0);
+    bool screenChanged = (sLastScreenName && strcmp(sLastScreenName, s.screen) != 0);
 
-    if (stateChanged || now - sLastPushMs >= interval) {
+    // Push immediately on any state or screen transition so the remote-
+    // control UI mirrors the device within one tick of the user's action.
+    if (stateChanged || screenChanged || now - sLastPushMs >= interval) {
         sLastPushMs = now;
         pushState();
     }

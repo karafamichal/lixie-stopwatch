@@ -42,6 +42,10 @@ void tick();
 // Forward a touch into the active screen's hit-tester.
 void handleTouch(const NextionTouch& t);
 
+// Synthetic-touch injection from the WebSocket "remote control" channel.
+// Behaves identically to a touch coming from the Nextion UART.
+void injectTouch(int x, int y, bool pressed);
+
 // Brief banner (e.g. "Saved!", "POST failed"). Shown for `ms`, then auto-
 // transitions to `nextScreen` (defaults to SCR_IDLE).
 void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_IDLE);
@@ -50,6 +54,7 @@ void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_ID
 // to the dashboard so multiple users can watch live sessions.
 struct LiveSnapshot {
     const char* state;            // "idle"|"selecting"|"running"|"paused"|"confirm"
+    const char* screen;            // "idle"|"client"|"project"|"app"|"running"|"confirm"|"discard_confirm"|"settings"|"toast"|"boot"
     int      clientId;            // -1 if none
     String   clientName;
     String   clientColor;         // "#RRGGBB", empty if none

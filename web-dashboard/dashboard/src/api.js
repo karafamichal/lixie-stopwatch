@@ -33,6 +33,9 @@ export const devices = {
   remove:      (id)         => http.delete(`/devices/${id}`),
   getSettings: (id)         => http.get(`/devices/${id}/settings`).then(r => r.data),
   setSettings: (id, data)   => http.put(`/devices/${id}/settings`, data).then(r => r.data),
+  // Remote control — synthetic Nextion touch at (x, y).
+  remoteTouch: (id, x, y, pressed = true) =>
+    http.post(`/devices/${id}/remote/touch`, { x, y, pressed }).then(r => r.data),
 };
 
 export const apps = {

@@ -33,10 +33,12 @@
 // WiFi / API
 // These are the *factory defaults* — they're tried only when no credentials
 // have been saved via the on-device web setup page yet. After the first
-// successful provisioning the saved (NVS) credentials take precedence.
+// successful provisioning the saved (NVS) credentials take precedence, so
+// for most users it's enough to leave these placeholders alone and finish
+// setup from the captive portal on first boot.
 
-#define WIFI_SSID     "LagTop"
-#define WIFI_PASSWORD "LagTop123"
+#define WIFI_SSID     "changeme"
+#define WIFI_PASSWORD "changeme"
 
 // Soft-AP that comes up when the ESP32 can't connect to any known network.
 // Connect a phone to it, then browse to http://192.168.4.1 to configure.
@@ -44,15 +46,18 @@
 #define AP_PASSWORD             ""           // empty = open AP
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
-// REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
+// REST base URL — must end without trailing slash. Point this at the
+// machine running the Flask backend (see README → Server installation).
+#define API_BASE_URL  "http://changeme.local:5000/api/v1"
 
 // Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "193.87.172.155"
+#define WS_HOST       "changeme.local"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 
-// Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
+// Identifier this device sends in POST /timelogs (auto-registers a row in
+// the `device` table). Keep it unique per physical unit if you run more
+// than one stopwatch against the same server.
 #define HARDWARE_ID   "esp32_lixie_001"
 
 // ============================================================================
@@ -62,7 +67,7 @@
 // then current conditions are pulled from Open-Meteo. No API key required.
 // RSS feed for the rotating headline at the bottom of the idle screen.
 //   Swap freely. https URLs are supported (TLS via setInsecure()).
-#define NEWS_RSS_URL "https://www.aktuality.sk/rss/"
+#define NEWS_RSS_URL "https://feeds.bbci.co.uk/news/world/europe/rss.xml"
 #define WEATHER_REFRESH_MS  (60UL * 60UL * 1000UL)   // 1 hour
 #define NEWS_REFRESH_MS     (15UL * 60UL * 1000UL)
 #define NEWS_ROTATE_MS      8000UL

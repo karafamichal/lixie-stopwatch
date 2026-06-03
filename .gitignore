@@ -1,0 +1,25 @@
+.claude/
+CLAUDE.md
+Lixie StopWatch — Build Estimate.xlsx
+
+# Python backend
+web-dashboard/backend/.venv/
+web-dashboard/backend/__pycache__/
+web-dashboard/backend/.pytest_cache/
+web-dashboard/backend/.mypy_cache/
+web-dashboard/backend/*.py[cod]
+
+# React dashboard
+web-dashboard/dashboard/node_modules/
+web-dashboard/dashboard/dist/
+web-dashboard/dashboard/.vite/
+web-dashboard/dashboard/.env
+web-dashboard/dashboard/.env.*
+
+# Firmware build output
+nextion-stopwatch/.pio/
+nextion-stopwatch/.vscode/
+
+# OS/editor noise
+Thumbs.db
+.DS_Store

@@ -2,17 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes nixieGlow {
+@keyframes lixieGlow {
   0%, 100% { background-position: 0% 50%; }
   50%       { background-position: 100% 50%; }
 }
-.nixie-hero {
+.lixie-hero {
   background: linear-gradient(-45deg,
     #78350f, #b45309, #d97706, #f59e0b,
     #fbbf24, #f59e0b, #d97706, #b45309,
     #92400e, #78350f);
   background-size: 400% 400%;
-  animation: nixieGlow 22s ease infinite;
+  animation: lixieGlow 22s ease infinite;
 }
 
 @layer base {

@@ -318,7 +318,10 @@ static void drawIdleSettingsButton() {
 
 static void drawIdle() {
     Nextion::clear(COL_BG);
-    Nextion::drawTextCentered(0, 4, DISP_W, 38,
+    // Centre the title in the area to the LEFT of the settings tile so the
+    // last few characters don't end up tucked behind the "..." button at
+    // HOME_X. HOME_X = DISP_W - 44, so the title bbox stops there.
+    Nextion::drawTextCentered(0, 4, HOME_X, 38,
                               FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPWATCH");
     drawIdleSettingsButton();
 

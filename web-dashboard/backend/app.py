@@ -134,7 +134,7 @@ def create_app():
     # SPA catch-all route runs for every non-API path instead of getting a 404.
     app = Flask(__name__, static_folder=None)
     app.config['SQLALCHEMY_DATABASE_URI'] = (
-        'sqlite:///' + os.path.join(basedir, 'instance', 'nixie.db')
+        'sqlite:///' + os.path.join(basedir, 'instance', 'lixie.db')
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 

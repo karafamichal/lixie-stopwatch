@@ -11,17 +11,17 @@ CRGB leds[LED_NUM];
 // Per-position LED index for each digit (0..9). Calibrated for the assembled
 // matrix — adjust per board if a particular segment is dark.
 static const uint8_t ledIndex[6][10] = {
-    //matrix1 deiatky hodin
+    // matrix 1 — tens of hours
     { 1,0,8,9,11,10,18,19,21,20},
-    //matrix1 jednotky hodin
+    // matrix 1 — units of hours
     {4,3,5,6,14,13,15,16,24,23},
-    //matrix2 deiatky minut
+    // matrix 2 — tens of minutes
     {26,25,33,34,36,35,43,44,46,45},
-    //matrix2 jednotky minut
+    // matrix 2 — units of minutes
     {29,28,30,31,39,38,40,41,49,48},
-    //matrix3 desiatky sekund
+    // matrix 3 — tens of seconds
     {51,50,58,59,61,60,68,69,71,70},
-    //matrix3 jednotky sekund
+    // matrix 3 — units of seconds
     {54,53,55,56,64,63,65,66,74,73}
 };
 
@@ -73,18 +73,12 @@ void setColons(bool leftOn, bool rightOn, CRGB color) {
 
 void setColonColor(CRGB color) {
     colonColor = color;
-    // Ak práve blikáme, necháme blikanie pokračovať s novou farbou
-    if (blinkEnabled) {
-        // Aktuálny stav dvojbodiek prekreslíme s novou farbou
-        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
-        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
-        FastLED.show();
-    } else {
-        // Ak nebliká, nastavíme trvalý stav podľa aktuálnych colonLeftState/RightState
-        leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
-        leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
-        FastLED.show();
-    }
+    // Whether we are currently blinking or holding a fixed state, just
+    // re-push both colon LEDs with the new colour so the change is visible
+    // without waiting for the next toggle.
+    leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;
+    leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
+    FastLED.show();
 }
 
 void setColonBlink(bool enabled, unsigned long intervalMs) {
@@ -104,4 +98,12 @@ void updateColonBlink() {
         leds[LED_COLON_RIGHT] = colonRightState ? colonColor : CRGB::Black;
         FastLED.show();
     }
+}
+
+void setColonPhase(bool on) {
+    colonLeftState  = on;
+    colonRightState = on;
+    leds[LED_COLON_LEFT]  = on ? colonColor : CRGB::Black;
+    leds[LED_COLON_RIGHT] = on ? colonColor : CRGB::Black;
+    FastLED.show();
 }

@@ -1,15 +1,18 @@
-# Nixie Stopky — API Reference
+# Lixie StopWatch — API Reference
 
 Base URL: `http://<server>:5000/api/v1`
 
-All request bodies are JSON (`Content-Type: application/json`).  
+All request bodies are JSON (`Content-Type: application/json`).
 All responses are JSON. Dates are ISO 8601 strings (`2026-05-26T14:30:00`).
+
+The server exposes a REST API for everything that doesn't need to be live
+(CRUD, reports) and a single WebSocket channel for live state push and
+remote control. ESP32 stopwatches and the React dashboard both use the same
+endpoints.
 
 ---
 
 ## Data model overview
-
-The database has five tables. The hierarchy that ties a work session together is:
 
 ```
 client  ──<  project  ──<  time_log  >──  app
@@ -17,18 +20,18 @@ client  ──<  project  ──<  time_log  >──  app
                                   >──  device
 ```
 
-One `time_log` row = one completed work session.  
-It answers **"who worked, on what project, for which client, using which app, for how long, on which device."**
+One `time_log` row = one completed work session: **who worked, on what
+project, for which client, using which app, for how long, on which device.**
 
-### Table relationships
+### Tables
 
-| Table | Foreign keys | Cascade |
-|-------|-------------|---------|
-| `project` | `client_id → client.id` | deleted when client is deleted |
-| `time_log` | `client_id → client.id` | deleted when client is deleted |
-| `time_log` | `project_id → project.id` | deleted when project is deleted |
-| `time_log` | `app_id → app.id` (nullable) | app deletion does NOT remove logs |
-| `time_log` | `device_id → device.id` (nullable) | kept when device is deleted |
+| Table | Notable columns | Cascade |
+|-------|-----------------|---------|
+| `client`   | `name`, `active`, `color`, `logo`, `created_at` | — |
+| `project`  | `name`, `client_id`, `active`, `color`, `logo`, `completed`, `completed_at` | deleted when client is deleted |
+| `app`      | `name`, `category`, `icon`, `color`, `logo`, `is_builtin`, `hourly_rate`, `active` | — |
+| `device`   | `hardware_id`, `label`, `last_seen` | — |
+| `time_log` | `device_id`, `client_id`, `project_id`, `app_id`, `start_timestamp`, `duration_seconds`, `notes`, `status`, `synced_at` | `client_id`/`project_id` delete cascades; `app_id`/`device_id` are nullable and kept on delete |
 
 ---
 
@@ -38,7 +41,6 @@ It answers **"who worked, on what project, for which client, using which app, fo
 
 Returns all clients ordered by name.
 
-**Response**
 ```json
 [
   {
@@ -46,60 +48,31 @@ Returns all clients ordered by name.
     "name": "Acme Corp",
     "active": true,
     "color": "#FF8000",
+    "logo": null,
     "created_at": "2026-05-01T10:00:00"
   }
 ]
 ```
 
-Used by: ESP32 (to build the selection menu), dashboard.
-
----
-
 ### `POST /clients`
-
-Create a new client.
-
-**Request body**
-```json
-{
-  "name": "Acme Corp",
-  "active": true,
-  "color": "#FF8000"
-}
-```
 
 | Field | Type | Required | Default |
 |-------|------|----------|---------|
 | `name` | string | yes | — |
 | `active` | boolean | no | `true` |
-| `color` | string (hex) | no | `#FF8000` |
+| `color` | string `#RRGGBB` | no | `#FF8000` |
+| `logo` | data URL string | no | `null` |
 
-**Response** — `201 Created`, same shape as GET item.
-
----
+Returns `201` with the created object.
 
 ### `PUT /clients/<id>`
 
-Update any subset of fields on an existing client.
-
-**Request body** (all fields optional)
-```json
-{
-  "name": "Acme Corp Renamed",
-  "active": false,
-  "color": "#31A8FF"
-}
-```
-
-**Response** — `200 OK`, updated client object.
-
----
+Any subset of `name`, `active`, `color`, `logo`. Returns the updated object.
 
 ### `DELETE /clients/<id>`
 
-Delete a client. **Cascades**: all projects and all time logs belonging to this client are also deleted.
-
-**Response** — `204 No Content`
+Cascades: all projects and time logs for this client are also deleted.
+`204 No Content`.
 
 ---
 
@@ -107,14 +80,9 @@ Delete a client. **Cascades**: all projects and all time logs belonging to this 
 
 ### `GET /projects?client_id=<id>`
 
-Returns **active** projects only. Used by the ESP32 — it passes a `client_id` to get only that client's projects.
+**Active** projects only — what the ESP32 consumes when building the
+project picker.
 
-```
-GET /projects              → all active projects across all clients
-GET /projects?client_id=3  → only active projects of client 3
-```
-
-**Response**
 ```json
 [
   {
@@ -122,80 +90,79 @@ GET /projects?client_id=3  → only active projects of client 3
     "client_id": 3,
     "client_name": "Acme Corp",
     "client_color": "#FF8000",
+    "client_logo": null,
     "name": "Website Redesign",
     "active": true,
     "color": "#2D8CFF",
+    "logo": null,
+    "completed": false,
+    "completed_at": null,
     "created_at": "2026-05-10T09:00:00"
   }
 ]
 ```
 
----
-
 ### `GET /projects/all?client_id=<id>`
 
-Returns **all** projects (active and inactive). Dashboard only.
-
----
+All projects (active **and** inactive). Dashboard only.
 
 ### `POST /projects`
-
-Create a new project.
-
-**Request body**
-```json
-{
-  "name": "Website Redesign",
-  "client_id": 3,
-  "active": true,
-  "color": "#2D8CFF"
-}
-```
 
 | Field | Type | Required | Default |
 |-------|------|----------|---------|
 | `name` | string | yes | — |
 | `client_id` | integer | yes | — |
 | `active` | boolean | no | `true` |
-| `color` | string (hex) | no | `#FF8000` |
+| `color` | hex | no | `#FF8000` |
+| `logo` | data URL | no | `null` |
 
-**Response** — `201 Created`
-
----
+Returns `201`.
 
 ### `PUT /projects/<id>`
 
-Update project fields.
+Any subset of the create fields, plus:
 
-**Request body** (all optional)
+| Field | Type | Notes |
+|-------|------|-------|
+| `completed` | boolean | When set `true` the project is auto-deactivated and `completed_at` is stamped to `now`. Setting back to `false` clears `completed_at`. |
+
+### `GET /projects/<id>/billing`
+
+Per-app time and earnings breakdown for one project.
+
 ```json
 {
-  "name": "New Name",
-  "client_id": 4,
-  "active": false,
-  "color": "#217346"
+  "project_id": 7,
+  "project_name": "Website Redesign",
+  "total_seconds": 36000,
+  "total_earnings": 950.00,
+  "breakdown": [
+    {
+      "app_id": 2,
+      "app_name": "Photoshop",
+      "app_icon": "🎨",
+      "app_color": "#31A8FF",
+      "hourly_rate": 95.00,
+      "seconds": 18000,
+      "hours": 5.0,
+      "earnings": 475.00
+    }
+  ]
 }
 ```
 
-**Response** — `200 OK`
-
----
-
 ### `DELETE /projects/<id>`
 
-Delete a project. **Cascades**: all time logs for this project are also deleted.
-
-**Response** — `204 No Content`
+Cascades all time logs for this project. `204`.
 
 ---
 
-## Apps
+## Apps (a.k.a. Pricing tools)
 
 ### `GET /apps`
 
-Returns **active** apps only, ordered by category then name. Used by the ESP32.
+Active apps only, ordered by category then name. Used by the ESP32.
 
-**Response**
 ```json
 [
   {
@@ -204,6 +171,7 @@ Returns **active** apps only, ordered by category then name. Used by the ESP32.
     "category": "Design",
     "icon": "🎨",
     "color": "#31A8FF",
+    "logo": null,
     "active": true,
     "is_builtin": true,
     "hourly_rate": 95.00,
@@ -212,95 +180,50 @@ Returns **active** apps only, ordered by category then name. Used by the ESP32.
 ]
 ```
 
----
-
 ### `GET /apps/all`
 
-Returns all apps including inactive. Dashboard only.
-
----
+All apps including inactive. Dashboard only.
 
 ### `POST /apps`
 
-Create a custom app (non-built-in).
+Create a **custom** (non-built-in) app.
 
-**Request body**
-```json
-{
-  "name": "My Tool",
-  "category": "Design",
-  "icon": "🛠️",
-  "color": "#FF8000",
-  "hourly_rate": 80.00
-}
-```
-
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `name` | string | yes | — |
-| `category` | string | no | `Other` |
-| `icon` | string (emoji) | no | `🖥️` |
-| `color` | string (hex) | no | `#FF8000` |
-| `hourly_rate` | float | no | `null` |
-
-**Response** — `201 Created`
-
----
+| Field | Type | Default |
+|-------|------|---------|
+| `name` | string | required |
+| `category` | string | `Other` |
+| `icon` | string (emoji) | `🖥️` |
+| `color` | hex | `#FF8000` |
+| `hourly_rate` | float | `null` |
+| `logo` | data URL | `null` |
 
 ### `PUT /apps/<id>`
 
-Update an app. For **built-in** apps only `active` and `hourly_rate` can be changed — name/category/icon/color are locked.
-
-**Request body** (all optional)
-```json
-{
-  "active": true,
-  "hourly_rate": 120.00,
-  "name": "My Tool v2",
-  "category": "Development",
-  "icon": "🔧",
-  "color": "#007ACC"
-}
-```
-
-**Response** — `200 OK`
-
----
+For **built-in** apps only `active`, `hourly_rate` and `logo` can be
+changed (name / category / icon / color stay locked). Custom apps accept
+the full set.
 
 ### `DELETE /apps/<id>`
 
-Delete a custom app. Returns `400` if the app is built-in.  
-Time logs that referenced this app **keep their `app_id`** — the foreign key is nullable and is not cascade-deleted.
-
-**Response** — `204 No Content`
+Returns `400` if `is_builtin`. Time logs that referenced this app keep
+their `app_id` value — it's nullable, not cascaded.
 
 ---
 
 ## Time Logs
 
-This is the core endpoint. Every session the ESP32 records ends up here.
-
 ### `GET /timelogs`
 
-List time logs, newest first. Supports filters via query parameters.
-
-```
-GET /timelogs
-GET /timelogs?client_id=3
-GET /timelogs?client_id=3&project_id=7
-GET /timelogs?app_id=2
-GET /timelogs?from=2026-05-01&to=2026-05-31
-```
+List time logs, newest first. Filters:
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `client_id` | integer | Filter by client |
-| `project_id` | integer | Filter by project |
-| `app_id` | integer | Filter by app |
-| `from` | date (YYYY-MM-DD) | Start of date range (inclusive) |
-| `to` | date (YYYY-MM-DD) | End of date range (inclusive) |
+| `client_id` | integer | filter by client |
+| `project_id` | integer | filter by project |
+| `app_id` | integer | filter by app |
+| `from` | `YYYY-MM-DD` | start of date range (inclusive) |
+| `to` | `YYYY-MM-DD` | end of date range (inclusive) |
 
-**Response**
 ```json
 [
   {
@@ -325,112 +248,114 @@ GET /timelogs?from=2026-05-01&to=2026-05-31
 ]
 ```
 
----
-
 ### `POST /timelogs` — primary ESP32 endpoint
 
-Submit a completed work session. This is the main call the device makes after the user stops the timer.
-
-**Request body**
-```json
-{
-  "hardware_id": "esp32_lixie_001",
-  "client_id": 3,
-  "project_id": 7,
-  "app_id": 2,
-  "start_timestamp": "2026-05-26T14:00:00Z",
-  "duration_seconds": 5400,
-  "notes": "Homepage banner mockups",
-  "status": "completed"
-}
-```
+Submit a completed session.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `hardware_id` | string | no | Identifies the physical device. Auto-creates a `device` row on first sight and updates `last_seen` on every submission. |
-| `client_id` | integer | yes | Must exist in the database. |
-| `project_id` | integer | yes | Must exist in the database. |
-| `app_id` | integer | no | If omitted or `null`, the session is logged without an app. |
-| `start_timestamp` | ISO 8601 string | no | UTC preferred (trailing `Z` accepted). Defaults to server time if omitted. |
+| `hardware_id` | string | no | Auto-creates a `device` row on first sight and updates `last_seen` on every submission. |
+| `client_id` | integer | yes | Must exist. |
+| `project_id` | integer | yes | Must exist. |
+| `app_id` | integer | no | If omitted/`null`, the session is logged without an app. |
+| `start_timestamp` | ISO 8601 | no | UTC preferred (trailing `Z` accepted). Defaults to server time if omitted. |
 | `duration_seconds` | integer | yes | Total elapsed seconds the timer ran. |
 | `notes` | string | no | Free-text memo. |
 | `status` | string | no | `completed` / `pending` / `synced`. Defaults to `completed`. |
 
-**Response** — `201 Created`, full time log object (same shape as GET list item).
+Returns `201` with the full time log object.
 
----
+### `PUT /timelogs/<id>` / `DELETE /timelogs/<id>`
 
-### `PUT /timelogs/<id>`
-
-Edit an existing log entry. Dashboard only.
-
-**Request body** (all optional)
-```json
-{
-  "client_id": 3,
-  "project_id": 7,
-  "app_id": 2,
-  "start_timestamp": "2026-05-26T14:00:00",
-  "duration_seconds": 3600,
-  "notes": "Corrected duration",
-  "status": "completed"
-}
-```
-
-**Response** — `200 OK`
-
----
-
-### `DELETE /timelogs/<id>`
-
-Delete a single log entry.
-
-**Response** — `204 No Content`
+Edit / remove a single entry (dashboard).
 
 ---
 
 ## Devices
 
-Devices are auto-registered the first time a `hardware_id` appears in a `POST /timelogs` call. The only manual operation is assigning a human-readable label.
+Devices are auto-registered the first time their `hardware_id` appears in
+either a `POST /timelogs` call, a heartbeat, or a WebSocket connection.
 
 ### `GET /devices`
 
-Returns all known devices, ordered by most recently seen.
+All known devices, most recently seen first.
 
-**Response**
 ```json
 [
-  {
-    "id": 1,
-    "hardware_id": "esp32_lixie_001",
-    "label": "Studio Device",
-    "last_seen": "2026-05-26T15:30:00"
-  }
+  { "id": 1, "hardware_id": "esp32_lixie_001", "label": "Studio Device", "last_seen": "2026-05-26T15:30:00" }
 ]
 ```
 
----
+### `POST /devices/heartbeat`
+
+Body: `{ "hardware_id": "esp32_lixie_001" }`. Touches `last_seen` so the
+dashboard's online indicator stays accurate between time-log submissions.
+First call also auto-registers the device. `204`.
 
 ### `PUT /devices/<id>`
 
-Assign or update the label.
+Body `{ "label": "Studio Device" }`. Returns the updated device.
 
-**Request body**
+### `GET /devices/<id>/settings`
+
+Read the currently-cached LED matrix settings for one device.
+
 ```json
 {
-  "label": "Studio Device"
+  "hardware_id":  "esp32_lixie_001",
+  "color":        "#FF8000",
+  "colon_color":  "#FF8000",
+  "colon_linked": true,
+  "brightness":   150,
+  "online":       true
 }
 ```
 
-**Response** — `200 OK`
+### `PUT /devices/<id>/settings`
 
----
+Push new LED settings to a device. Any subset of fields may be sent.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `color` | `#RRGGBB` | Clock / stopwatch digit colour |
+| `colon_color` | `#RRGGBB` | The two blinking colon dots (independent colour) |
+| `colon_linked` | boolean | When `true` the colon colour automatically mirrors `color`; PUTting `colon_color` without an explicit `colon_linked` flips it to `false` |
+| `brightness` | `0..255` | Single global FastLED brightness |
+
+The dashboard-only `colon_linked` flag is stripped before pushing to the
+device — the firmware only ever sees `{type:"settings", color, colon_color,
+brightness}`. Settings are also cached server-side and re-sent to the
+device the moment it next connects.
+
+Response includes the merged state plus `delivered: true|false`
+(`false` = device is currently offline; the cached value will be replayed
+on reconnect).
+
+### `POST /devices/<id>/remote/touch`
+
+Inject a synthetic Nextion touch — used by the Remote Control modal in
+the dashboard to operate the device as if you were tapping the physical
+screen.
+
+Body:
+
+```json
+{ "x": 200, "y": 120, "pressed": true }
+```
+
+| Field | Type | Range / default |
+|-------|------|-----------------|
+| `x` | integer | `0..399` (matches device screen) |
+| `y` | integer | `0..239` |
+| `pressed` | boolean | default `true` (the firmware acts on press, ignores release) |
+
+Response `{ "delivered": true|false }` — `false` means the device was
+offline and the touch was dropped (not queued).
 
 ### `DELETE /devices/<id>`
 
-Remove a device record. Does not affect time logs — `device_id` in existing logs becomes orphaned but is kept for historical display.
-
-**Response** — `204 No Content`
+Remove the device row. Time logs from this device keep their `device_id`
+(orphaned reference, kept for history).
 
 ---
 
@@ -438,9 +363,6 @@ Remove a device record. Does not affect time logs — `device_id` in existing lo
 
 ### `GET /stats`
 
-Summary counts and time totals for the Overview page.
-
-**Response**
 ```json
 {
   "clients": 5,
@@ -455,78 +377,67 @@ Summary counts and time totals for the Overview page.
 }
 ```
 
-Week starts on Monday. Both ranges are UTC-based.
+Week starts on Monday. Ranges are UTC-based.
 
 ---
 
 ## Reports
 
-All report endpoints share the same optional query parameters:
+All four report endpoints share the same optional filters:
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `from` | date (YYYY-MM-DD) | Start of range (inclusive) |
-| `to` | date (YYYY-MM-DD) | End of range (inclusive) |
-| `client_id` | integer | Limit to one client |
-| `project_id` | integer | Limit to one project |
-
----
+| `from` | `YYYY-MM-DD` | start of range (inclusive) |
+| `to` | `YYYY-MM-DD` | end of range (inclusive) |
+| `client_id` | integer | limit to one client |
+| `project_id` | integer | limit to one project |
 
 ### `GET /reports/daily`
 
-Total tracked seconds per calendar day. Used for the trend chart.
+Total tracked seconds per calendar day. Days with zero activity are not
+included — the dashboard fills the gaps.
 
-**Response**
 ```json
 [
   { "date": "2026-05-24", "seconds": 18000 },
-  { "date": "2026-05-25", "seconds": 25200 },
-  { "date": "2026-05-26", "seconds": 9000 }
+  { "date": "2026-05-25", "seconds": 25200 }
 ]
 ```
-
-Days with zero activity are **not** included — the frontend fills gaps.
-
----
 
 ### `GET /reports/by-client`
 
-Total seconds per client, descending. Ignores `client_id` filter (always all clients).
+Total seconds and earnings per client, descending.
 
-**Response**
 ```json
 [
-  { "id": 3, "name": "Acme Corp", "color": "#FF8000", "seconds": 54000 },
-  { "id": 1, "name": "Beta Ltd",  "color": "#2D8CFF", "seconds": 18000 }
+  { "id": 3, "name": "Acme Corp", "color": "#FF8000", "seconds": 54000, "earnings": 1425.00 }
 ]
 ```
 
----
-
 ### `GET /reports/by-project`
 
-Total seconds per project, descending.
+Total seconds and earnings per project, descending. Includes the
+`completed` flag so the dashboard can colour finished projects differently.
 
-**Response**
 ```json
 [
   {
     "id": 7,
     "name": "Website Redesign",
     "color": "#2D8CFF",
+    "completed": false,
     "client_name": "Acme Corp",
-    "seconds": 36000
+    "seconds": 36000,
+    "earnings": 950.00
   }
 ]
 ```
 
----
-
 ### `GET /reports/by-app`
 
-Total seconds per app, descending. Only apps that appear in at least one log are returned.
+Total seconds per app, descending. Only apps with at least one log are
+returned.
 
-**Response**
 ```json
 [
   {
@@ -542,69 +453,103 @@ Total seconds per app, descending. Only apps that appear in at least one log are
 
 ---
 
-## How a session is stored end-to-end
+## Live state
 
+### `GET /live`
+
+A plain HTTP snapshot of every device's last-known state — useful for
+cold-start renders in the dashboard before its WebSocket connection lands.
+
+```json
+[
+  {
+    "type": "device_state",
+    "hardware_id": "esp32_lixie_001",
+    "state": "running",
+    "screen": "running",
+    "paused": false,
+    "elapsed_seconds": 1234,
+    "client_id": 3, "client_name": "Acme Corp", "client_color": "#FF8000",
+    "project_id": 7, "project_name": "Website Redesign",
+    "app_id": 2, "app_name": "Photoshop",
+    "start_timestamp": "2026-05-26T14:00:00Z",
+    "received_at": "2026-05-26T14:20:34Z"
+  }
+]
 ```
-ESP32 user flow                     Database result
-─────────────────────────────────   ───────────────────────────────────────────
-1. Turn encoder → fetch clients     SELECT * FROM client WHERE active = 1
-2. Select "Acme Corp" (id=3)
-3. Fetch projects for client 3      SELECT * FROM project WHERE client_id=3
-                                                               AND active=1
-4. Select "Website Redesign" (id=7)
-5. Fetch active apps                SELECT * FROM app WHERE active = 1
-6. Select "Photoshop" (id=2)
-7. Start timer (14:00:00 UTC)
-8. Press encoder to stop (15:30:00) → duration = 5400 s
 
-POST /api/v1/timelogs
+### `/api/v1/ws` — WebSocket
+
+A single bidirectional channel used by both ESP32 devices and dashboards.
+
+**Device → server (state push)**
+
+The device sends a state message immediately on every state-or-screen
+change, then every 1 s while active and every 5 s while idle.
+
+```json
 {
-  "hardware_id":      "esp32_lixie_001",   ← device auto-registered/updated
-  "client_id":        3,
-  "project_id":       7,
-  "app_id":           2,
-  "start_timestamp":  "2026-05-26T14:00:00Z",
-  "duration_seconds": 5400,
-  "status":           "completed"
+  "type": "state",
+  "hardware_id": "esp32_lixie_001",
+  "state": "running",
+  "screen": "running",
+  "paused": false,
+  "elapsed_seconds": 1234,
+  "client_id": 3, "client_name": "Acme Corp", "client_color": "#FF8000",
+  "project_id": 7, "project_name": "Website Redesign",
+  "app_id": 2, "app_name": "Photoshop",
+  "start_timestamp": "2026-05-26T14:00:00Z",
+
+  /* Screen-specific extras filled by the firmware so the dashboard can
+     mirror the device's screen faithfully without a side fetch. */
+  "weather":       { "city": "Bratislava", "temp_c": 23.2, "condition": "Partly cloudy" },
+  "news_headline": "* Top story...",
+  "idle_date":     "26.05.2026",
+  "list_rows":     [ { "name": "Acme Corp", "color": "#FF8000" } ],
+  "list_offset":   0,
+  "list_count":    7,
+  "toast_message": "Saved"
 }
-
-INSERT INTO time_log
-  (device_id, client_id, project_id, app_id,
-   start_timestamp, duration_seconds, status, synced_at)
-VALUES
-  (1,          3,         7,          2,
-   '2026-05-26 14:00:00', 5400, 'completed', <now>);
 ```
 
-To reconstruct the full picture of that row later:
+The `weather`, `news_headline`, `idle_date`, `list_*` and `toast_message`
+keys are only present when the relevant screen is active.
 
-```sql
-SELECT
-    tl.id,
-    tl.start_timestamp,
-    tl.duration_seconds,
-    tl.status,
-    c.name  AS client,
-    p.name  AS project,
-    a.name  AS app,
-    a.icon  AS app_icon,
-    a.hourly_rate,
-    d.label AS device
-FROM time_log tl
-JOIN client  c ON c.id = tl.client_id
-JOIN project p ON p.id = tl.project_id
-LEFT JOIN app    a ON a.id = tl.app_id
-LEFT JOIN device d ON d.id = tl.device_id
-WHERE tl.id = 42;
+**Dashboard → server (subscribe)**
+
+```json
+{ "type": "subscribe" }
 ```
 
-`app` and `device` use `LEFT JOIN` because both are nullable — a session can be logged without selecting an app, and manual entries created in the dashboard have no device.
+The server then broadcasts every device-state push it receives to all
+subscribed dashboards, re-typed as `device_state`:
+
+```json
+{
+  "type": "device_state",
+  "hardware_id": "esp32_lixie_001",
+  /* ...identical payload to the device push above... */
+  "received_at": "2026-05-26T14:20:34Z"
+}
+```
+
+The first device-state message after a (re)connect also triggers a replay
+of any cached settings (`color`, `colon_color`, `brightness`) so a
+dashboard-driven setting survives the device dropping offline.
+
+**Server → device (control)**
+
+```json
+{ "type": "settings",     "color": "#FF8000", "colon_color": "#FF8000", "brightness": 150 }
+{ "type": "remote_touch", "x": 200, "y": 120, "pressed": true }
+```
+
+These are sent in response to `PUT /devices/<id>/settings` and
+`POST /devices/<id>/remote/touch` respectively.
 
 ---
 
 ## Error responses
-
-All errors return JSON.
 
 ```json
 { "error": "name is required" }
@@ -612,6 +557,6 @@ All errors return JSON.
 
 | Status | When |
 |--------|------|
-| `400` | Missing required field, invalid reference (unknown client/project ID) |
+| `400` | Missing required field, invalid reference, bad colour / coordinate / brightness range |
 | `404` | Record not found for the given ID |
-| `500` | Unexpected server error | 
+| `500` | Unexpected server error |

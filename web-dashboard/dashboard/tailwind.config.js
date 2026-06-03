@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        nixie: {
+        lixie: {
           50:  '#fff8eb',
           100: '#ffefc3',
           200: '#ffdb82',

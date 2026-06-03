@@ -132,7 +132,7 @@ export default function Homepage() {
   return (
     <div>
       {/* ── hero ─────────────────────────────────────────────────────────── */}
-      <div className="nixie-hero rounded-2xl p-5 sm:p-6 md:p-8 mb-5 md:mb-8 relative overflow-hidden">
+      <div className="lixie-hero rounded-2xl p-5 sm:p-6 md:p-8 mb-5 md:mb-8 relative overflow-hidden">
         <div className="absolute inset-0 bg-black/30" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">

@@ -28,4 +28,9 @@ void setColonBlink(bool enabled, unsigned long intervalMs);
 void updateColonBlink();
 void setColonColor(CRGB color);
 
+// Force both colon LEDs to the given on/off state (using the current colon
+// colour). Caller drives the blink rhythm — used to sync the colons with the
+// actual displayed second instead of a free-running millis() timer.
+void setColonPhase(bool on);
+
 #endif

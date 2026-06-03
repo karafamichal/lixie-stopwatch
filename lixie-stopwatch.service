@@ -1,0 +1,25 @@
+[Unit]
+Description=Lixie StopWatch — Flask backend + WebSocket hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lixie
+Group=lixie
+WorkingDirectory=/opt/lixie-stopwatch/backend
+ExecStart=/opt/lixie-stopwatch/venv/bin/gunicorn \
+    --worker-class gevent \
+    --workers 1 \
+    --bind 0.0.0.0:5000 \
+    --timeout 60 \
+    --access-logfile /var/log/lixie-stopwatch/access.log \
+    --error-logfile /var/log/lixie-stopwatch/error.log \
+    "app:create_app()"
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

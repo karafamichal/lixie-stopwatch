@@ -29,17 +29,28 @@ static Screen   sScreen     = SCR_BOOT;
 static Screen   sPrevScreen = SCR_BOOT;
 static bool     sDirty      = true;
 
-static Entity sClients[MAX_ENTITIES];   static int sClientCount  = 0;
-static Entity sProjects[MAX_ENTITIES];  static int sProjectCount = 0;
-static Entity sApps[MAX_ENTITIES];      static int sAppCount     = 0;
+static Entity sClients[MAX_ENTITIES];      static int sClientCount       = 0;
+static Entity sProjects[MAX_ENTITIES];     static int sProjectCount      = 0;
+static Entity sApps[MAX_ENTITIES];         static int sAppCount          = 0;
+// Categories derived from sApps[].extra so the app picker doesn't force the
+// user to scroll past every tool. Filled by buildCategoryList().
+static Entity sCategories[MAX_ENTITIES];   static int sCategoryCount     = 0;
+// Apps filtered down to the one category the user just picked — drawn on
+// SCR_APP instead of the full sApps[] list.
+static Entity sCategoryApps[MAX_ENTITIES]; static int sCategoryAppCount  = 0;
+static String sSelCategory;                // empty = none picked yet
 
 // One scroll offset per list-screen. Preserved across back-navigation, reset
 // only when the underlying list is refetched (new client → fresh project list).
-static int sClientOffset  = 0;
-static int sProjectOffset = 0;
-static int sAppOffset     = 0;
+static int sClientOffset   = 0;
+static int sProjectOffset  = 0;
+static int sCategoryOffset = 0;
+static int sAppOffset      = 0;
 
-static const int LIST_VISIBLE = 4;
+static const int LIST_VISIBLE        = 4;
+// Category and app pickers leave room at the bottom for the "Skip app"
+// button, so they show one fewer row to keep text from being covered.
+static const int LIST_VISIBLE_SHORT  = 3;
 static const int ROW_H = 44;
 static const int ROW_X = 12, ROW_Y0 = 52, ROW_W = 376;
 
@@ -227,8 +238,9 @@ static void drawFooterHint(const String& s) {
 // ---------------------------------------------------------------------------
 // List rendering (shared by client/project/app screens)
 // ---------------------------------------------------------------------------
-static void drawList(Entity* items, int count, const String& emptyMsg, int offset) {
-    for (int i = 0; i < LIST_VISIBLE; ++i) {
+static void drawList(Entity* items, int count, const String& emptyMsg, int offset,
+                     int visibleN = LIST_VISIBLE) {
+    for (int i = 0; i < visibleN; ++i) {
         int y = ROW_Y0 + i * ROW_H;
         int idx = offset + i;
         Nextion::fillRect(ROW_X, y, ROW_W, ROW_H - 4, COL_PANEL);
@@ -261,11 +273,12 @@ static void drawList(Entity* items, int count, const String& emptyMsg, int offse
 }
 
 // -2 = scroll up, -3 = scroll down, -1 = no hit, otherwise list index.
-static int listHit(const NextionTouch& t, int count, int offset) {
+static int listHit(const NextionTouch& t, int count, int offset,
+                   int visibleN = LIST_VISIBLE) {
     int btnX = DISP_W - 44;
     if (inRect(t, btnX, ROW_Y0, 32, 60)) return -2;
     if (inRect(t, btnX, ROW_Y0 + 100, 32, 60)) return -3;
-    for (int i = 0; i < LIST_VISIBLE; ++i) {
+    for (int i = 0; i < visibleN; ++i) {
         int y = ROW_Y0 + i * ROW_H;
         if (inRect(t, ROW_X, y, ROW_W, ROW_H - 4)) {
             int idx = offset + i;
@@ -367,6 +380,49 @@ static void drawIdle() {
     drawFooterHint(String(dateBuf));
 }
 
+// Walk sApps[] and collect the set of unique categories into sCategories[]
+// in first-seen order (which the API already groups by category, so similar
+// tools stay next to each other).
+static void buildCategoryList() {
+    sCategoryCount = 0;
+    for (int i = 0; i < sAppCount && sCategoryCount < MAX_ENTITIES; i++) {
+        const String& cat = sApps[i].extra;
+        if (cat.length() == 0) continue;
+        bool seen = false;
+        for (int j = 0; j < sCategoryCount; j++) {
+            if (sCategories[j].name == cat) { seen = true; break; }
+        }
+        if (seen) continue;
+        sCategories[sCategoryCount].id    = sCategoryCount;
+        sCategories[sCategoryCount].name  = cat;
+        sCategories[sCategoryCount].color = sApps[i].color;   // first tool's swatch
+        sCategories[sCategoryCount].extra = "";
+        sCategoryCount++;
+    }
+}
+
+// Pull the rows of sApps[] whose `extra` matches sSelCategory into a
+// separate buffer that SCR_APP renders.
+static void filterAppsByCategory() {
+    sCategoryAppCount = 0;
+    for (int i = 0; i < sAppCount && sCategoryAppCount < MAX_ENTITIES; i++) {
+        if (sApps[i].extra == sSelCategory) {
+            sCategoryApps[sCategoryAppCount++] = sApps[i];
+        }
+    }
+}
+
+// Breadcrumb that mirrors the navigation path the user took, e.g.
+// "Acme Corp / Site redesign / Design". Skips empty segments.
+static String breadcrumb(const String& a,
+                         const String& b = String(),
+                         const String& c = String()) {
+    String s = a;
+    if (b.length()) s += " / " + b;
+    if (c.length()) s += " / " + c;
+    return s;
+}
+
 static void drawClientScreen() {
     Nextion::clear(COL_BG);
     drawHeader("Select client", false);
@@ -376,15 +432,30 @@ static void drawClientScreen() {
 
 static void drawProjectScreen() {
     Nextion::clear(COL_BG);
-    drawHeader(String("Project — ") + sSelClientName, true);
+    drawHeader(breadcrumb(sSelClientName), true);
     drawList(sProjects, sProjectCount, "No projects for this client", sProjectOffset);
     drawFooterHint("Tap a project to continue");
 }
 
+static void drawCategoryScreen() {
+    Nextion::clear(COL_BG);
+    drawHeader(breadcrumb(sSelClientName, sSelProjectName), true);
+    // Render only LIST_VISIBLE_SHORT rows so the "Skip app" button below
+    // doesn't overlap the fourth row's text.
+    drawList(sCategories, sCategoryCount, "No apps available", sCategoryOffset,
+             LIST_VISIBLE_SHORT);
+
+    Nextion::fillRect(12, DISP_H - 44, 120, 30, COL_PANEL);
+    Nextion::drawTextCentered(12, DISP_H - 44, 120, 30,
+                              FONT_SMALL, COL_TEXT, COL_PANEL, "Skip app");
+    drawFooterHint("Pick a category, or skip the app");
+}
+
 static void drawAppScreen() {
     Nextion::clear(COL_BG);
-    drawHeader(String("App — ") + sSelProjectName, true);
-    drawList(sApps, sAppCount, "No apps available", sAppOffset);
+    drawHeader(breadcrumb(sSelClientName, sSelProjectName, sSelCategory), true);
+    drawList(sCategoryApps, sCategoryAppCount, "No apps in this category", sAppOffset,
+             LIST_VISIBLE_SHORT);
 
     Nextion::fillRect(12, DISP_H - 44, 120, 30, COL_PANEL);
     Nextion::drawTextCentered(12, DISP_H - 44, 120, 30,
@@ -766,9 +837,9 @@ static void onTouchDiscardConfirm(const NextionTouch& t) {
     }
 }
 
-static void onScrollHit(int hit, int count, int& offset) {
+static void onScrollHit(int hit, int count, int& offset, int visibleN = LIST_VISIBLE) {
     if (hit == -2 && offset > 0) { offset--; sDirty = true; }
-    if (hit == -3 && offset + LIST_VISIBLE < count) { offset++; sDirty = true; }
+    if (hit == -3 && offset + visibleN < count) { offset++; sDirty = true; }
 }
 
 static void onTouchIdle(const NextionTouch& t) {
@@ -791,6 +862,10 @@ static void onTouchIdle(const NextionTouch& t) {
     sClientOffset = 0;
     sDirty = true;
 }
+
+// Forward-declared so the category/app touch handlers can call it before
+// the definition appears below.
+static void startSession(int appId, const String& appName);
 
 static void onTouchClient(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
@@ -815,8 +890,30 @@ static void onTouchProject(const NextionTouch& t) {
     sSelProject     = p.id;
     sSelProjectName = p.name;
     sSelProjectHex  = p.color;
-    sAppCount   = Api::fetchApps(sApps, MAX_ENTITIES);
-    sAppOffset  = 0;     // fresh app list
+    // Fetch the full app catalogue and derive the category set the user
+    // will pick from next. The user can also hit "Skip app" on either the
+    // category or the app screen to start the session without an app.
+    sAppCount        = Api::fetchApps(sApps, MAX_ENTITIES);
+    buildCategoryList();
+    sCategoryOffset  = 0;
+    sAppOffset       = 0;
+    sSelCategory     = "";
+    goTo(SCR_CATEGORY);
+}
+
+static void onTouchCategory(const NextionTouch& t) {
+    if (inHomeButton(t, 4)) { goHome(); return; }
+    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }
+    // "Skip app" — bottom-left button at the same coords as on SCR_APP.
+    if (inRect(t, 12, DISP_H - 44, 120, 30)) {
+        startSession(-1, "");
+        return;
+    }
+    int hit = listHit(t, sCategoryCount, sCategoryOffset, LIST_VISIBLE_SHORT);
+    if (hit < 0) { onScrollHit(hit, sCategoryCount, sCategoryOffset, LIST_VISIBLE_SHORT); return; }
+    sSelCategory = sCategories[hit].name;
+    filterAppsByCategory();
+    sAppOffset   = 0;
     goTo(SCR_APP);
 }
 
@@ -836,11 +933,11 @@ static void startSession(int appId, const String& appName) {
 
 static void onTouchApp(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }  // back keeps sProjectOffset
+    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CATEGORY); return; }   // back to categories
     if (inRect(t, 12, DISP_H - 44, 120, 30)) { startSession(-1, "(no app)"); return; }
-    int hit = listHit(t, sAppCount, sAppOffset);
-    if (hit < 0) { onScrollHit(hit, sAppCount, sAppOffset); return; }
-    Entity& a = sApps[hit];
+    int hit = listHit(t, sCategoryAppCount, sAppOffset, LIST_VISIBLE_SHORT);
+    if (hit < 0) { onScrollHit(hit, sCategoryAppCount, sAppOffset, LIST_VISIBLE_SHORT); return; }
+    Entity& a = sCategoryApps[hit];
     startSession(a.id, a.name);
 }
 
@@ -955,6 +1052,7 @@ void tick() {
             case SCR_IDLE:            drawIdle();                 break;
             case SCR_CLIENT:          drawClientScreen();         break;
             case SCR_PROJECT:         drawProjectScreen();        break;
+            case SCR_CATEGORY:        drawCategoryScreen();       break;
             case SCR_APP:             drawAppScreen();            break;
             case SCR_RUNNING:         drawRunningScreen();        break;
             case SCR_CONFIRM:         drawConfirmScreen();        break;
@@ -990,6 +1088,7 @@ void handleTouch(const NextionTouch& t) {
         case SCR_IDLE:            onTouchIdle(t);           break;
         case SCR_CLIENT:          onTouchClient(t);         break;
         case SCR_PROJECT:         onTouchProject(t);        break;
+        case SCR_CATEGORY:        onTouchCategory(t);       break;
         case SCR_APP:             onTouchApp(t);            break;
         case SCR_RUNNING:         onTouchRunning(t);        break;
         case SCR_CONFIRM:         onTouchConfirm(t);        break;
@@ -1019,6 +1118,7 @@ LiveSnapshot getLiveSnapshot() {
         case SCR_IDLE:            s.state = "idle";       s.screen = "idle";            break;
         case SCR_CLIENT:          s.state = "selecting";  s.screen = "client";          break;
         case SCR_PROJECT:         s.state = "selecting";  s.screen = "project";         break;
+        case SCR_CATEGORY:        s.state = "selecting";  s.screen = "category";        break;
         case SCR_APP:             s.state = "selecting";  s.screen = "app";             break;
         case SCR_RUNNING:         s.state = sPaused ? "paused" : "running"; s.screen = "running"; break;
         case SCR_CONFIRM:         s.state = "confirm";    s.screen = "confirm";         break;
@@ -1045,8 +1145,9 @@ LiveSnapshot getLiveSnapshot() {
     s.projectId   = sSelProject;
     s.projectName = sSelProjectName;
     s.projectColor = sSelProjectHex;
-    s.appId       = sSelApp;
-    s.appName     = sSelAppName;
+    s.appId        = sSelApp;
+    s.appName      = sSelAppName;
+    s.categoryName = sSelCategory;
     s.startIso    = sStartIso;
     s.paused      = sPaused;
 
@@ -1084,15 +1185,18 @@ void writeStateExtras(JsonDocument& doc) {
             doc["idle_date"] = buf;
         }
     }
-    else if (sScreen == SCR_CLIENT || sScreen == SCR_PROJECT || sScreen == SCR_APP) {
+    else if (sScreen == SCR_CLIENT  || sScreen == SCR_PROJECT  ||
+             sScreen == SCR_CATEGORY || sScreen == SCR_APP) {
         Entity* arr = nullptr;
         int count = 0, offset = 0;
         if (sScreen == SCR_CLIENT) {
-            arr = sClients;  count = sClientCount;  offset = sClientOffset;
+            arr = sClients;       count = sClientCount;      offset = sClientOffset;
         } else if (sScreen == SCR_PROJECT) {
-            arr = sProjects; count = sProjectCount; offset = sProjectOffset;
+            arr = sProjects;      count = sProjectCount;     offset = sProjectOffset;
+        } else if (sScreen == SCR_CATEGORY) {
+            arr = sCategories;    count = sCategoryCount;    offset = sCategoryOffset;
         } else {
-            arr = sApps;     count = sAppCount;     offset = sAppOffset;
+            arr = sCategoryApps;  count = sCategoryAppCount; offset = sAppOffset;
         }
         doc["list_count"]  = count;
         doc["list_offset"] = offset;
@@ -1103,9 +1207,6 @@ void writeStateExtras(JsonDocument& doc) {
             r["color"] = arr[i].color;
             if (arr[i].extra.length()) r["extra"] = arr[i].extra;
         }
-        // For PROJECT, the title shows the parent client name (already in
-        // s.clientName via getLiveSnapshot()); for APP, the parent project
-        // name. Nothing extra to add here.
     }
     else if (sScreen == SCR_TOAST) {
         doc["toast_message"] = sToastMsg;

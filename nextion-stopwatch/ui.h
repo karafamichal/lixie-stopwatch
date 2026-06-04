@@ -20,6 +20,7 @@ enum Screen {
     SCR_IDLE,
     SCR_CLIENT,
     SCR_PROJECT,
+    SCR_CATEGORY,      // app-category picker, sits between project and app
     SCR_APP,
     SCR_RUNNING,
     SCR_CONFIRM,
@@ -56,7 +57,7 @@ void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_ID
 // to the dashboard so multiple users can watch live sessions.
 struct LiveSnapshot {
     const char* state;            // "idle"|"selecting"|"running"|"paused"|"confirm"
-    const char* screen;            // "idle"|"client"|"project"|"app"|"running"|"confirm"|"discard_confirm"|"settings"|"toast"|"boot"|"sleep"
+    const char* screen;            // "idle"|"client"|"project"|"category"|"app"|"running"|"confirm"|"discard_confirm"|"settings"|"toast"|"boot"|"sleep"
     int      clientId;            // -1 if none
     String   clientName;
     String   clientColor;         // "#RRGGBB", empty if none
@@ -65,6 +66,7 @@ struct LiveSnapshot {
     String   projectColor;        // "#RRGGBB", empty if none
     int      appId;               // -1 if none
     String   appName;
+    String   categoryName;        // selected app category, empty if none yet
     String   startIso;            // empty if no active session
     uint32_t elapsedSec;          // 0 if not running/paused
     bool     paused;

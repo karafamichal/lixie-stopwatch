@@ -122,6 +122,9 @@ static void pushState() {
         doc["app_id"]   = s.appId;
         doc["app_name"] = s.appName;
     }
+    if (s.categoryName.length()) {
+        doc["category_name"] = s.categoryName;
+    }
     if (s.startIso.length()) {
         doc["start_timestamp"] = s.startIso;
     }

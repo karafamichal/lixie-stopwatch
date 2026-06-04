@@ -102,10 +102,11 @@ int fetchApps(Entity* out, int max) {
         out[n].id    = obj["id"].as<int>();
         out[n].name  = utf8ToAscii(obj["name"].as<const char*>());
         out[n].color = obj["color"].as<const char*>();
-        // The API delivers app icons as emoji — Nextion ASCII fonts can't
-        // render them, so we drop them rather than scattering '?' through
-        // the list rows.
-        out[n].extra = "";
+        // Stash the app's category in `extra` so the UI can group apps by
+        // category on the on-device picker. (App icons are emoji and the
+        // Nextion ASCII fonts can't render them, so we drop those.)
+        const char* cat = obj["category"].as<const char*>();
+        out[n].extra = cat ? utf8ToAscii(cat) : String("Other");
         n++;
     }
     return n;

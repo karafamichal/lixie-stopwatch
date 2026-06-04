@@ -202,11 +202,11 @@ function ListRow({ y, item }) {
   );
 }
 
-function ListScreen({ title, state }) {
+function ListScreen({ title, state, visibleN = 4 }) {
   const rows    = state?.list_rows || [];
   const offset  = state?.list_offset ?? 0;
   const count   = state?.list_count ?? rows.length;
-  const visible = [0, 1, 2, 3].map(i => rows[offset + i] || null);
+  const visible = Array.from({ length: visibleN }, (_, i) => rows[offset + i] || null);
   const empty   = count === 0;
   return (
     <>
@@ -227,8 +227,34 @@ function ListScreen({ title, state }) {
         <Label x={0} y={0} w={32} h={60} size={22} color={COL.text}>v</Label>
       </Rect>
       <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>
-        {count > 4 ? `${offset + 1}–${Math.min(offset + 4, count)} of ${count}` : `Tap a row to continue`}
+        {count > visibleN
+          ? `${offset + 1}–${Math.min(offset + visibleN, count)} of ${count}`
+          : `Tap a row to continue`}
       </Label>
+    </>
+  );
+}
+
+// Breadcrumb that mirrors the navigation path the user took on the device,
+// e.g. "Acme Corp / Site redesign / Design" — same shape as breadcrumb()
+// in ui.cpp. Skips empty / missing segments.
+function crumb(...parts) {
+  return parts.filter(p => p && String(p).length).join(' / ');
+}
+
+function CategoryScreen({ state }) {
+  return (
+    <>
+      <ListScreen
+        title={crumb(state?.client_name, state?.project_name)}
+        state={state}
+        visibleN={3}
+      />
+      {/* Skip-app button — same coords as on the app screen so users get a
+          consistent place to skip selection. */}
+      <Rect x={12} y={DISP_H - 44} w={120} h={30} bg={COL.panel}>
+        <Label x={0} y={0} w={120} h={30} size={12}>Skip app</Label>
+      </Rect>
     </>
   );
 }
@@ -236,7 +262,11 @@ function ListScreen({ title, state }) {
 function AppScreen({ state }) {
   return (
     <>
-      <ListScreen title={`App — ${state?.project_name || ''}`} state={state} />
+      <ListScreen
+        title={crumb(state?.client_name, state?.project_name, state?.category_name)}
+        state={state}
+        visibleN={3}
+      />
       {/* Skip-app button overlays the footer area */}
       <Rect x={12} y={DISP_H - 44} w={120} h={30} bg={COL.panel}>
         <Label x={0} y={0} w={120} h={30} size={12}>Skip app</Label>
@@ -445,7 +475,8 @@ function ScreenContent({ screen, state }) {
   switch (screen) {
     case 'idle':            return <IdleScreen state={state} />;
     case 'client':          return <ListScreen title="Select client" state={state} />;
-    case 'project':         return <ListScreen title={`Project — ${state?.client_name || ''}`} state={state} />;
+    case 'project':         return <ListScreen title={crumb(state?.client_name)} state={state} />;
+    case 'category':        return <CategoryScreen state={state} />;
     case 'app':             return <AppScreen state={state} />;
     case 'running':         return <RunningScreen state={state} />;
     case 'confirm':         return <ConfirmScreen state={state} />;

@@ -298,33 +298,41 @@ Body `{ "label": "Studio Device" }`. Returns the updated device.
 
 ### `GET /devices/<id>/settings`
 
-Read the currently-cached LED matrix settings for one device.
+Read the currently-cached LED + display settings for one device.
 
 ```json
 {
-  "hardware_id":  "esp32_lixie_001",
-  "color":        "#FF8000",
-  "colon_color":  "#FF8000",
-  "colon_linked": true,
-  "brightness":   150,
-  "online":       true
+  "hardware_id":        "esp32_lixie_001",
+  "color":              "#FF8000",
+  "colon_color":        "#FF8000",
+  "colon_linked":       true,
+  "brightness":         150,
+  "display_brightness": 100,
+  "sleep_timeout_sec":  30,
+  "sleep_on_idle":      false,
+  "online":             true
 }
 ```
 
 ### `PUT /devices/<id>/settings`
 
-Push new LED settings to a device. Any subset of fields may be sent.
+Push new LED + display settings to a device. Any subset of fields may
+be sent.
 
 | Field | Type | Notes |
 |-------|------|-------|
 | `color` | `#RRGGBB` | Clock / stopwatch digit colour |
 | `colon_color` | `#RRGGBB` | The two blinking colon dots (independent colour) |
 | `colon_linked` | boolean | When `true` the colon colour automatically mirrors `color`; PUTting `colon_color` without an explicit `colon_linked` flips it to `false` |
-| `brightness` | `0..255` | Single global FastLED brightness |
+| `brightness` | `0..255` | LED matrix brightness (single global FastLED setting) |
+| `display_brightness` | `0..100` | Nextion backlight, in percent. `0` turns the backlight all the way off (controller still responds to commands). |
+| `sleep_timeout_sec` | `0..65535` | Seconds of inactivity before the touch display dims to the icon-only sleep view. `0` disables auto-sleep entirely. |
+| `sleep_on_idle` | boolean | When `true`, the sleep timeout also applies to the idle / home screen (coffee-cup icon). When `false`, sleep only triggers from the running session view. |
 
 The dashboard-only `colon_linked` flag is stripped before pushing to the
-device — the firmware only ever sees `{type:"settings", color, colon_color,
-brightness}`. Settings are also cached server-side and re-sent to the
+device — the firmware only ever sees `{type:"settings", color,
+colon_color, brightness, display_brightness, sleep_timeout_sec,
+sleep_on_idle}`. Settings are cached server-side and re-sent to the
 device the moment it next connects.
 
 Response includes the merged state plus `delivered: true|false`
@@ -470,8 +478,9 @@ cold-start renders in the dashboard before its WebSocket connection lands.
     "paused": false,
     "elapsed_seconds": 1234,
     "client_id": 3, "client_name": "Acme Corp", "client_color": "#FF8000",
-    "project_id": 7, "project_name": "Website Redesign",
+    "project_id": 7, "project_name": "Website Redesign", "project_color": "#2D8CFF",
     "app_id": 2, "app_name": "Photoshop",
+    "category_name": "Design",
     "start_timestamp": "2026-05-26T14:00:00Z",
     "received_at": "2026-05-26T14:20:34Z"
   }
@@ -496,8 +505,9 @@ change, then every 1 s while active and every 5 s while idle.
   "paused": false,
   "elapsed_seconds": 1234,
   "client_id": 3, "client_name": "Acme Corp", "client_color": "#FF8000",
-  "project_id": 7, "project_name": "Website Redesign",
+  "project_id": 7, "project_name": "Website Redesign", "project_color": "#2D8CFF",
   "app_id": 2, "app_name": "Photoshop",
+  "category_name": "Design",
   "start_timestamp": "2026-05-26T14:00:00Z",
 
   /* Screen-specific extras filled by the firmware so the dashboard can
@@ -512,8 +522,21 @@ change, then every 1 s while active and every 5 s while idle.
 }
 ```
 
-The `weather`, `news_headline`, `idle_date`, `list_*` and `toast_message`
-keys are only present when the relevant screen is active.
+The `screen` string is one of
+`boot | idle | client | project | category | app | running | confirm |
+discard_confirm | settings | toast | sleep` (matching the device's
+internal screen enum). On the `category` and `app` screens the `list_*`
+extras carry the category list (or the in-category app list)
+respectively, so the dashboard mirror can render the same rows the
+device is showing.
+
+The `project_color`, `category_name`, `weather`, `news_headline`,
+`idle_date`, `list_*` and `toast_message` keys are only present when
+their corresponding context is active (e.g. `category_name` shows up
+once the user has picked a category; `idle_date` only on the idle
+screen). `screen: "sleep"` keeps the underlying `state` value
+(`running` / `paused` / `idle`) so dashboards still know what the
+session is doing while the touch panel is dimmed.
 
 **Dashboard → server (subscribe)**
 
@@ -534,18 +557,29 @@ subscribed dashboards, re-typed as `device_state`:
 ```
 
 The first device-state message after a (re)connect also triggers a replay
-of any cached settings (`color`, `colon_color`, `brightness`) so a
+of any cached settings (`color`, `colon_color`, `brightness`,
+`display_brightness`, `sleep_timeout_sec`, `sleep_on_idle`) so a
 dashboard-driven setting survives the device dropping offline.
 
 **Server → device (control)**
 
 ```json
-{ "type": "settings",     "color": "#FF8000", "colon_color": "#FF8000", "brightness": 150 }
+{
+  "type":               "settings",
+  "color":              "#FF8000",
+  "colon_color":        "#FF8000",
+  "brightness":         150,
+  "display_brightness": 100,
+  "sleep_timeout_sec":  30,
+  "sleep_on_idle":      false
+}
 { "type": "remote_touch", "x": 200, "y": 120, "pressed": true }
 ```
 
-These are sent in response to `PUT /devices/<id>/settings` and
-`POST /devices/<id>/remote/touch` respectively.
+A `settings` payload may include any subset of the keys above; the
+firmware applies only the keys present. These are sent in response to
+`PUT /devices/<id>/settings` and `POST /devices/<id>/remote/touch`
+respectively.
 
 ---
 

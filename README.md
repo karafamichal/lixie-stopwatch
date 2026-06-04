@@ -2,7 +2,7 @@
 
 An open-source, Wi-Fi-connected time-tracking device that combines retro
 Lixie (pseudo-Nixie) tube aesthetics with modern IoT. Tap a touch screen,
-pick a client / project / app, watch the LED digits count up, and submit
+pick a client, project, app category and tool, watch the LED digits count up, and submit
 the session to a self-hosted backend with one tap. All clients, projects
 and time logs live on a Flask + SQLite server you control; a React
 dashboard gives you full CRUD, live status, reports and a remote-control
@@ -16,9 +16,16 @@ mirror of every device's screen.
 
 * **6-digit Lixie display (HH:MM:SS)** — 75 WS2812B LEDs on 3× 5×5 boards,
   light shining through engraved cast-acrylic tiles to give a floating
-  3-D digit effect.
-* **Touch UI on a 3.2" Nextion display** — pick a client → project →
-  optional app, then Start. Pause / Continue / Stop / Discard on screen.
+  3-D digit effect. The two colon dots flip on/off in lock-step with the
+  visible seconds.
+* **Touch UI on a 3.2" Nextion display** — guided picker walks you
+  through **client → project → category → app**, then Start. The
+  category step groups your apps so you don't have to scroll past every
+  tool. Pause / Continue / Stop / Discard on screen, with the project
+  name shown in its own colour during a session.
+* **Breadcrumb navigation** — each selection screen's header shows the
+  path you've taken (e.g. `Acme Corp / Site redesign / Design`), so it's
+  always clear how deep you are.
 * **Wi-Fi onboarding via captive portal** — no need to flash credentials
   into the firmware. Plug in a fresh device, it brings up
   `LixieStopWatch-Setup`, you join it from a phone and pick your home /
@@ -32,11 +39,19 @@ mirror of every device's screen.
 * **Remote control mirror** — a faithful 400×240 React render of the
   device's screen; click anywhere on it to inject a touch as if you'd
   tapped the physical Nextion. Operate the unit blind from the dashboard.
-* **Per-device LED settings** — clock colour, brightness, and an
-  independent colour for the blinking colon dots, all editable from the
+* **Per-device LED + display settings** — clock colour, LED brightness,
+  an independent colour for the blinking colon dots, **Nextion backlight
+  brightness (0–100 %; 0 = display off)**, and an **auto-sleep timeout**
+  with an optional "also sleep on idle" toggle. All editable from the
   dashboard and persisted in NVS on the device.
+* **Auto-sleep view** — after the configured timeout the touch display
+  dims to a minimalist icon-only screen (stopwatch glyph while running,
+  coffee cup while paused or idle) so the panel isn't distracting in a
+  shared workspace. Tap anywhere to wake back to where you were.
 * **Weather + RSS news on the idle screen** — auto-derived from public
-  IP, no API keys required.
+  IP, no API keys required. Headline rotates every 8 s and the
+  background fetch only runs while the device is idle so timing during a
+  session is never disturbed.
 
 ---
 
@@ -262,12 +277,24 @@ Now go to the dashboard at `http://<your-server>:5000/`:
 
 * **Devices** page shows your stopwatch as **Online** within ~5 seconds
   of the first WebSocket connect.
-* Click the **palette** icon to set its clock + colon colours and
-  brightness.
-* Click the **mirror screen** icon to remote-control it from the
-  browser.
-* In **Clients** create your first client, then a project under it, and
-  the device's selection menu populates instantly via REST.
+* Click the **palette** icon to set per-device matrix settings:
+  - **Clock colour** and **LED matrix brightness** (Low / Med / High / Max)
+  - **Colon dot colour** — independent from the clock colour, with a
+    *link* toggle that keeps them in sync when on
+  - **Touch display brightness** — 0–100 % slider; 0 % turns the Nextion
+    backlight all the way off
+  - **Auto-sleep** — seconds of inactivity before the screen dims to the
+    icon-only sleep view (0 disables); a switch lets you extend the
+    timeout to the idle screen too
+* Click the **mirror screen** icon to remote-control the unit from the
+  browser. The mirror reproduces every screen — including the sleep
+  view — and clicks are converted to device pixels and posted as a
+  synthetic touch.
+* In **Clients** create your first client, then a project under it.
+  Under **Pricing** add any custom apps you want grouped per category
+  (Design / Development / Office / …). On the device the picker walks
+  the user through **Client → Project → Category → App** with three
+  rows per screen so there's no scrolling past every tool.
 
 ---
 

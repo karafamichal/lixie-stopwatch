@@ -27,10 +27,16 @@ static String decodeEntities(String s) {
 namespace News {
 
 bool refresh() {
-    if (WiFi.status() != WL_CONNECTED) return false;
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[news] skipped (no WiFi)");
+        return false;
+    }
 
     HTTPClient http;
     http.setTimeout(8000);
+    // Many publishers 403 a bare empty UA, so always send one.
+    http.setUserAgent("LixieStopWatch/1.0 (ESP32)");
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     bool isHttps = String(NEWS_RSS_URL).startsWith("https://");
     WiFiClientSecure secure;
@@ -38,16 +44,48 @@ bool refresh() {
 
     bool ok = isHttps ? http.begin(secure, NEWS_RSS_URL)
                       : http.begin(NEWS_RSS_URL);
-    if (!ok) return false;
+    if (!ok) {
+        Serial.printf("[news] begin() failed for %s\n", NEWS_RSS_URL);
+        return false;
+    }
 
     int code = http.GET();
-    if (code != 200) { http.end(); return false; }
+    if (code != 200) {
+        String body = http.getString();
+        Serial.printf("[news] HTTP %d body=%s\n",
+                      code, body.substring(0, 120).c_str());
+        http.end();
+        return false;
+    }
 
-    String body = http.getString();
+    // Read the body manually — http.getString() returns "" for chunked
+    // responses over TLS on the ESP32 Arduino core, which is exactly the
+    // shape WordPress VIP / Varnish backends ship. Looping on
+    // getStreamPtr()->available() handles both Content-Length and chunked.
+    static const int   BODY_CAP   = 32000;
+    static const uint32_t DEADLINE = 8000;
+    WiFiClient* stream = http.getStreamPtr();
+    int contentLen = http.getSize();          // -1 if unknown (chunked)
+    String body;
+    body.reserve(contentLen > 0 && contentLen < BODY_CAP ? contentLen : 8192);
+
+    uint32_t start = millis();
+    while ((millis() - start) < DEADLINE && (int)body.length() < BODY_CAP) {
+        size_t avail = stream->available();
+        if (avail > 0) {
+            while (avail-- > 0 && (int)body.length() < BODY_CAP) {
+                body += (char)stream->read();
+            }
+            continue;
+        }
+        if (contentLen > 0 && (int)body.length() >= contentLen) break;
+        if (!http.connected() && stream->available() == 0) break;
+        delay(2);
+    }
     http.end();
 
-    // Trim absurdly large feeds to keep heap manageable.
-    if (body.length() > 32000) body = body.substring(0, 32000);
+    Serial.printf("[news] fetched %u bytes (cl=%d)\n",
+                  (unsigned)body.length(), contentLen);
 
     sCount = 0;
     int idx = 0;
@@ -70,6 +108,8 @@ bool refresh() {
         }
         idx = close + 8;
     }
+
+    Serial.printf("[news] parsed %d headlines\n", sCount);
 
     sLastUpdateMs = millis();
     if (sLastUpdateMs == 0) sLastUpdateMs = 1;

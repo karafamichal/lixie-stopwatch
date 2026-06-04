@@ -15,16 +15,37 @@
 namespace {
 
 // Common GET helper. Caller provides a JsonDocument; we fill it from the
-// response body. Returns HTTP status code or -1 on transport failure.
+// response body. Returns HTTP status code or a negative transport code on
+// failure:
+//   -1 = WiFi not connected
+//   -2 = http.begin() refused the URL
+//   -3 = JSON deserialization failed on a 200 response
+// All paths print a one-line diagnostic so failures aren't silent.
 int httpGetJson(const String& url, JsonDocument& doc) {
-    if (WiFi.status() != WL_CONNECTED) return -1;
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.printf("[api] GET %s skipped (no WiFi)\n", url.c_str());
+        return -1;
+    }
     HTTPClient http;
     http.setTimeout(5000);
-    if (!http.begin(url)) return -1;
+    if (!http.begin(url)) {
+        Serial.printf("[api] GET %s begin() failed\n", url.c_str());
+        return -2;
+    }
     int code = http.GET();
     if (code == 200) {
         DeserializationError err = deserializeJson(doc, http.getStream());
-        if (err) code = -2;
+        if (err) {
+            Serial.printf("[api] GET %s json err: %s\n", url.c_str(), err.c_str());
+            code = -3;
+        }
+    } else {
+        // A negative `code` here is one of HTTPClient's error constants
+        // (e.g. -1 = connection refused, -11 = read timeout). A positive
+        // non-2xx is what the server actually returned.
+        String body = http.getString();
+        Serial.printf("[api] GET %s -> HTTP %d body=%s\n",
+                      url.c_str(), code, body.substring(0, 120).c_str());
     }
     http.end();
     return code;

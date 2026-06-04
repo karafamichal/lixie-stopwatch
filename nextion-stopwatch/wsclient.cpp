@@ -26,12 +26,15 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
             Serial.printf("[ws] error len=%u\n", (unsigned)length);
             break;
         case WStype_TEXT: {
-            // Server → device control. Settings message shape:
+            // Server → device control. Settings message shape (all fields
+            // optional, any subset may be present):
             //   { "type": "settings",
-            //     "color":       "#RRGGBB",   // clock/stopwatch digits
-            //     "colon_color": "#RRGGBB",   // independent — the two dots
-            //     "brightness":  0..255 }
-            // Any subset of fields may be present; missing keys are ignored.
+            //     "color":              "#RRGGBB",   // clock/stopwatch digits
+            //     "colon_color":        "#RRGGBB",   // the two dots
+            //     "brightness":         0..255,      // LED matrix brightness
+            //     "display_brightness": 0..100,      // Nextion backlight %
+            //     "sleep_timeout_sec":  0..65535,    // 0 disables auto-sleep
+            //     "sleep_on_idle":      bool }      // sleep from idle too
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload, length);
             if (err) {
@@ -52,10 +55,28 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
                     if (b > 255) b = 255;
                     Settings::setBrightness((uint8_t)b);
                 }
-                Serial.printf("[ws] settings applied clock=%s colon=%s bright=%u\n",
+                if (doc["display_brightness"].is<int>()) {
+                    int p = doc["display_brightness"].as<int>();
+                    if (p < 0)   p = 0;
+                    if (p > 100) p = 100;
+                    Settings::setDisplayBrightness((uint8_t)p);
+                }
+                if (doc["sleep_timeout_sec"].is<int>()) {
+                    int s = doc["sleep_timeout_sec"].as<int>();
+                    if (s < 0)     s = 0;
+                    if (s > 65535) s = 65535;
+                    Settings::setSleepTimeoutSec((uint16_t)s);
+                }
+                if (doc["sleep_on_idle"].is<bool>()) {
+                    Settings::setSleepOnIdle(doc["sleep_on_idle"].as<bool>());
+                }
+                Serial.printf("[ws] settings applied clock=%s colon=%s bright=%u disp=%u sleep=%u idle=%d\n",
                               Settings::clockColorHex().c_str(),
                               Settings::colonColorHex().c_str(),
-                              Settings::brightness());
+                              Settings::brightness(),
+                              Settings::displayBrightness(),
+                              Settings::sleepTimeoutSec(),
+                              (int)Settings::sleepOnIdle());
             } else if (strcmp(msgType, "remote_touch") == 0) {
                 // Remote control — inject a synthetic touch as if the user
                 // had pressed/released the physical Nextion at (x,y).
@@ -93,8 +114,9 @@ static void pushState() {
         doc["client_color"] = s.clientColor;
     }
     if (s.projectId >= 0) {
-        doc["project_id"]   = s.projectId;
-        doc["project_name"] = s.projectName;
+        doc["project_id"]    = s.projectId;
+        doc["project_name"]  = s.projectName;
+        doc["project_color"] = s.projectColor;
     }
     if (s.appId >= 0) {
         doc["app_id"]   = s.appId;

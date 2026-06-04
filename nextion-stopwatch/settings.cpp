@@ -2,16 +2,21 @@
 #include "config.h"
 #include "leddisplay.h"
 #include "ledmap.h"
+#include "nextion.h"
 #include <Preferences.h>
 
-static String  sClockHex   = "#FF8000";
-static String  sColonHex   = "#FF8000";
-static uint8_t sBrightness = LED_BRIGHTNESS;
+static String   sClockHex     = "#FF8000";
+static String   sColonHex     = "#FF8000";
+static uint8_t  sBrightness   = LED_BRIGHTNESS;
+static uint8_t  sDisplayBri   = 100;     // backlight %
+static uint16_t sSleepTimeout = 30;      // seconds; 0 = disabled
+static bool     sSleepOnIdle  = false;
 
 static void apply() {
     LedDisplay::setClockColorHex(sClockHex);
     LedDisplay::setColonColorHex(sColonHex);
     setLedBrightness(sBrightness);
+    Nextion::setDim(sDisplayBri);
 }
 
 namespace Settings {
@@ -19,18 +24,25 @@ namespace Settings {
 void begin() {
     Preferences p;
     p.begin("leds", true);
-    sClockHex   = p.getString("color",  "#FF8000");
-    sColonHex   = p.getString("colon",  sClockHex);   // default = same as clock
-    sBrightness = p.getUChar ("bright", LED_BRIGHTNESS);
+    sClockHex     = p.getString("color",   "#FF8000");
+    sColonHex     = p.getString("colon",   sClockHex);
+    sBrightness   = p.getUChar ("bright",  LED_BRIGHTNESS);
+    sDisplayBri   = p.getUChar ("dispbri", 100);
+    sSleepTimeout = p.getUShort("sleeps",  30);
+    sSleepOnIdle  = p.getBool  ("sleepidle", false);
     p.end();
     apply();
-    Serial.printf("[settings] clock=%s colon=%s bright=%u\n",
-                  sClockHex.c_str(), sColonHex.c_str(), sBrightness);
+    Serial.printf("[settings] clock=%s colon=%s bright=%u disp=%u sleep=%u idle=%d\n",
+                  sClockHex.c_str(), sColonHex.c_str(), sBrightness,
+                  sDisplayBri, sSleepTimeout, (int)sSleepOnIdle);
 }
 
-String  clockColorHex() { return sClockHex; }
-String  colonColorHex() { return sColonHex; }
-uint8_t brightness()    { return sBrightness; }
+String   clockColorHex()    { return sClockHex; }
+String   colonColorHex()    { return sColonHex; }
+uint8_t  brightness()       { return sBrightness; }
+uint8_t  displayBrightness(){ return sDisplayBri; }
+uint16_t sleepTimeoutSec()  { return sSleepTimeout; }
+bool     sleepOnIdle()      { return sSleepOnIdle; }
 
 void setClockColorHex(const String& hex) {
     if (hex.length() != 7 || hex[0] != '#') return;
@@ -59,6 +71,32 @@ void setBrightness(uint8_t b) {
     p.putUChar("bright", b);
     p.end();
     setLedBrightness(b);
+}
+
+void setDisplayBrightness(uint8_t pct) {
+    if (pct > 100) pct = 100;
+    sDisplayBri = pct;
+    Preferences p;
+    p.begin("leds", false);
+    p.putUChar("dispbri", pct);
+    p.end();
+    Nextion::setDim(pct);
+}
+
+void setSleepTimeoutSec(uint16_t s) {
+    sSleepTimeout = s;
+    Preferences p;
+    p.begin("leds", false);
+    p.putUShort("sleeps", s);
+    p.end();
+}
+
+void setSleepOnIdle(bool on) {
+    sSleepOnIdle = on;
+    Preferences p;
+    p.begin("leds", false);
+    p.putBool("sleepidle", on);
+    p.end();
 }
 
 }  // namespace Settings

@@ -45,10 +45,10 @@
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://127.0.0.1:5000/api/v1"
+#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
 
 // Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "127.0.0.1:5000"
+#define WS_HOST       "193.87.172.155"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 
@@ -62,7 +62,7 @@
 // then current conditions are pulled from Open-Meteo. No API key required.
 // RSS feed for the rotating headline at the bottom of the idle screen.
 //   Swap freely. https URLs are supported (TLS via setInsecure()).
-#define NEWS_RSS_URL "https://techcrunch.com/startups/feed/"
+#define NEWS_RSS_URL "https://www.theverge.com/rss/tech/index.xml"
 #define WEATHER_REFRESH_MS  (60UL * 60UL * 1000UL)   // 1 hour
 #define NEWS_REFRESH_MS     (15UL * 60UL * 1000UL)
 #define NEWS_ROTATE_MS      8000UL
@@ -101,5 +101,6 @@
 #define COL_GREEN     0x07E0
 #define COL_RED       0xF800
 #define COL_BLUE      0x2D9F
+#define COL_GREY      0x6B4D  // #6B6B6B — pause-button neutral
 
 #endif

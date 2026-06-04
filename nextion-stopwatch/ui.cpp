@@ -44,8 +44,8 @@ static const int ROW_H = 44;
 static const int ROW_X = 12, ROW_Y0 = 52, ROW_W = 376;
 
 // Current selection
-static int sSelClient  = -1;   static String sSelClientName; static String sSelClientHex;
-static int sSelProject = -1;   static String sSelProjectName;
+static int sSelClient  = -1;   static String sSelClientName;  static String sSelClientHex;
+static int sSelProject = -1;   static String sSelProjectName; static String sSelProjectHex;
 static int sSelApp     = -1;   static String sSelAppName;
 static uint16_t sSelClientColor = COL_ACCENT;
 
@@ -72,6 +72,15 @@ static int      sIdleNewsIdx        = 0;
 static String   sToastMsg;
 static uint32_t sToastUntil = 0;
 static Screen   sToastNext  = SCR_IDLE;
+
+// Auto-sleep bookkeeping. sLastTouchMs is bumped on every press; sSleepWakeTo
+// remembers which screen we came from so we can restore it on tap-to-wake.
+// sSleepDrawnAsPaused / sSleepDrawnFromIdle let us swap icons in place when
+// the underlying state changes while the user is staring at the dim screen.
+static uint32_t sLastTouchMs        = 0;
+static Screen   sSleepWakeTo        = SCR_IDLE;
+static bool     sSleepDrawnAsPaused = false;
+static bool     sSleepDrawnFromIdle = false;
 
 // ---- Settings screen --------------------------------------------------------
 struct ColorPreset { const char* hex; uint16_t rgb565; };
@@ -171,7 +180,10 @@ static const int HOME_W = 40;
 static const int HOME_H = 32;
 
 static void drawHomeButton(int y) {
-    Nextion::fillRect(HOME_X, y, HOME_W, HOME_H, COL_ACCENT);
+    // Icon only — no backdrop tile. The strokes sit on top of whatever the
+    // header strip drew underneath (COL_PANEL on every screen that uses
+    // this button), with the door "knocked out" in that same panel colour
+    // so the icon reads as a clean orange house silhouette.
     int cx = HOME_X + HOME_W / 2;
 
     // Roof — filled triangle drawn as 8 horizontal lines, widening downwards.
@@ -179,12 +191,12 @@ static void drawHomeButton(int y) {
         int half = row * 2;
         if (half > 14) half = 14;
         Nextion::drawLine(cx - half, y + 6 + row,
-                          cx + half, y + 6 + row, COL_WHITE);
+                          cx + half, y + 6 + row, COL_ACCENT);
     }
     // Walls
-    Nextion::fillRect(cx - 11, y + 14, 22, 12, COL_WHITE);
-    // Door — knocked out in accent so it reads as a hole.
-    Nextion::fillRect(cx - 3,  y + 18,  6,  8, COL_ACCENT);
+    Nextion::fillRect(cx - 11, y + 14, 22, 12, COL_ACCENT);
+    // Door
+    Nextion::fillRect(cx - 3,  y + 18,  6,  8, COL_PANEL);
 }
 
 static bool inHomeButton(const NextionTouch& t, int y) {
@@ -271,8 +283,8 @@ static int listHit(const NextionTouch& t, int count, int offset) {
 //   y=  4..42  title "LIXIE STOPWATCH"
 //   y= 48..82  weather panel (city, temp, condition)
 //   y= 88..136 news headline (rotates every NEWS_ROTATE_MS)
-//   y=148..200 "TAP TO START" button
-//   y=222..240 WiFi footer
+//   y=148..200 "START" pill button (rounded ends, capR = 26)
+//   y=222..240 date footer
 
 static void drawIdleWeather() {
     const WeatherInfo& w = Weather::get();
@@ -308,12 +320,17 @@ static void drawIdleNews() {
 }
 
 static void drawIdleSettingsButton() {
-    // Settings entry point — uses the top-right corner that the home button
-    // occupies on every other screen. Plain panel tile + bold "..." marker.
-    Nextion::fillRect(HOME_X, 4, HOME_W, HOME_H, COL_PANEL);
-    Nextion::drawRect(HOME_X, 4, HOME_W, HOME_H, COL_ACCENT);
-    Nextion::drawTextCentered(HOME_X, 4, HOME_W, HOME_H,
-                              FONT_LARGE, COL_ACCENT, COL_PANEL, "...");
+    // Settings entry point — hamburger menu glyph (three horizontal bars).
+    // Icon only, no backdrop. Hit-test still covers the full HOME_X/
+    // HOME_W/HOME_H tile so corner taps still open Settings.
+    const int barW = 22;
+    const int barH = 4;
+    const int x    = HOME_X + (HOME_W - barW) / 2;
+    const int cy   = 4 + HOME_H / 2;
+    const int sp   = 9;                       // vertical spacing centre-to-centre
+    Nextion::fillRect(x, cy - sp - barH / 2, barW, barH, COL_ACCENT);
+    Nextion::fillRect(x, cy      - barH / 2, barW, barH, COL_ACCENT);
+    Nextion::fillRect(x, cy + sp - barH / 2, barW, barH, COL_ACCENT);
 }
 
 static void drawIdle() {
@@ -328,9 +345,18 @@ static void drawIdle() {
     drawIdleWeather();
     drawIdleNews();
 
-    Nextion::fillRect(60, 148, DISP_W - 120, 52, COL_ACCENT);
-    Nextion::drawTextCentered(60, 148, DISP_W - 120, 52,
-                              FONT_LARGE, COL_BLACK, COL_ACCENT, "TAP TO START");
+    // "TAP TO START" pill button — same rectangular bbox as before but with
+    // rounded ends (semicircle end-caps) so the corners match the round 3D
+    // case design. Hit-test in onTouchIdle() already treats the whole
+    // rectangle as the start-workflow trigger; the caps fall inside that
+    // bounding box so tap behaviour is unchanged.
+    const int btnX = 60, btnY = 148, btnW = DISP_W - 120, btnH = 52;
+    const int capR = btnH / 2;       // 26 → full pill curvature
+    Nextion::fillRect(btnX + capR, btnY, btnW - 2 * capR, btnH, COL_ACCENT);
+    Nextion::drawCircle(btnX + capR,        btnY + capR, capR, COL_ACCENT, true);
+    Nextion::drawCircle(btnX + btnW - capR, btnY + capR, capR, COL_ACCENT, true);
+    Nextion::drawTextCentered(btnX + capR, btnY, btnW - 2 * capR, btnH,
+                              FONT_LARGE, COL_BLACK, COL_ACCENT, "START");
 
     // Footer = today's date, in Slovak DD.MM.YYYY format.
     time_t now = time(nullptr);
@@ -370,23 +396,30 @@ static void drawRunningScreen() {
     Nextion::clear(COL_BG);
 
     // Top context strip (56 px tall — reserve right side for the home button).
+    // Client name on top, status (PAUSED / RUNNING) + app on the subtitle row.
     Nextion::fillRect(0, 0, DISP_W, 56, COL_PANEL);
     Nextion::drawLine(0, 56, DISP_W, 56, sSelClientColor);
     int topTextW = DISP_W - 16 - (HOME_W + 8);
     Nextion::drawTextSty(8, 4, topTextW, 24,
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 1, 1, 1,
                          sSelClientName);
+
+    String subtitle = sPaused ? String("PAUSED") : String("RUNNING");
+    if (sSelApp >= 0) subtitle += "   " + sSelAppName;
     Nextion::drawTextSty(8, 30, topTextW, 22,
-                         FONT_SMALL, COL_MUTED, COL_PANEL, 1, 1, 1,
-                         sSelProjectName + "   "
-                             + (sSelApp >= 0 ? sSelAppName : String("(no app)")));
+                         FONT_SMALL,
+                         sPaused ? COL_RED : COL_GREEN,
+                         COL_PANEL, 1, 1, 1,
+                         subtitle);
     drawHomeButton(12);   // centred in the taller running-screen strip
 
-    // Status
+    // Project name — sits where RUNNING/PAUSED used to be, rendered in the
+    // project's own swatch colour so the session is instantly recognisable.
+    uint16_t projectCol = sSelProjectHex.length() == 7
+                              ? hexToRgb565(sSelProjectHex) : COL_TEXT;
     Nextion::drawTextCentered(0, 66, DISP_W, 38,
-                              FONT_LARGE,
-                              sPaused ? COL_RED : COL_GREEN, COL_BG,
-                              sPaused ? "PAUSED" : "RUNNING");
+                              FONT_LARGE, projectCol, COL_BG,
+                              sSelProjectName);
 
     // Human-readable start time
     Nextion::drawTextCentered(0, 112, DISP_W, 30,
@@ -395,7 +428,7 @@ static void drawRunningScreen() {
 
     // Pause / Continue button (left). CONTINUE is too long for FONT_LARGE in
     // the available 170 px width; drop to FONT_MEDIUM so it fits cleanly.
-    uint16_t pauseBg   = sPaused ? COL_GREEN : COL_BLUE;
+    uint16_t pauseBg   = sPaused ? COL_GREEN : COL_GREY;
     uint16_t pauseFg   = sPaused ? COL_BLACK : COL_WHITE;
     uint8_t  pauseFont = sPaused ? FONT_MEDIUM : FONT_LARGE;
     Nextion::fillRect(20, 162, 170, 58, pauseBg);
@@ -568,6 +601,94 @@ static void drawToastScreen() {
                               FONT_LARGE, COL_TEXT, COL_PANEL, sToastMsg);
 }
 
+// Simple stopwatch glyph centred at (cx, cy). Outline circle face + the
+// little top button + a "twelve o'clock" tick + minute and hour hands.
+// All strokes drawn via the existing draw primitives so we don't depend
+// on a font that has a stopwatch character.
+static void drawStopwatchIcon(int cx, int cy) {
+    const uint16_t col = COL_ACCENT;
+    const int      r   = 56;
+
+    // Face — drawn as four concentric circles for a thicker outline since
+    // drawCircle without `filled=true` is a single-pixel stroke.
+    for (int dr = 0; dr < 3; dr++) Nextion::drawCircle(cx, cy, r - dr, col, false);
+
+    // Top button: a small rectangle straddling 12 o'clock.
+    Nextion::fillRect(cx - 5, cy - r - 9, 10, 9, col);
+
+    // 12 o'clock tick inside the face.
+    Nextion::drawLine(cx, cy - r + 4, cx, cy - r + 12, col);
+
+    // Minute hand (straight up) + hour hand (pointing right).
+    Nextion::drawLine(cx, cy, cx,         cy - r + 18, col);
+    Nextion::drawLine(cx, cy, cx + r - 28, cy,         col);
+
+    // Centre pivot.
+    Nextion::drawCircle(cx, cy, 3, col, true);
+}
+
+// Coffee mug glyph centred at (cx, cy). Cup body + handle + a couple of
+// steam wisps drawn as short angled lines.
+static void drawCoffeeIcon(int cx, int cy) {
+    const uint16_t col = COL_ACCENT;
+    const int      bodyW = 70, bodyH = 60;
+    const int      bodyX = cx - bodyW / 2;
+    const int      bodyY = cy - bodyH / 2 + 8;
+
+    // Mug body (a thick outlined rounded-ish rectangle).
+    for (int t = 0; t < 4; t++)
+        Nextion::drawRect(bodyX + t, bodyY + t, bodyW - 2 * t, bodyH - 2 * t, col);
+
+    // Rim line just below the top to suggest the inside.
+    Nextion::drawLine(bodyX + 6, bodyY + 8, bodyX + bodyW - 6, bodyY + 8, col);
+
+    // Handle on the right (two concentric arcs faked as full circles, but
+    // clipped to the right of the mug — only the right half is visible).
+    Nextion::drawCircle(bodyX + bodyW + 6, bodyY + bodyH / 2 + 2, 14, col, false);
+    Nextion::drawCircle(bodyX + bodyW + 6, bodyY + bodyH / 2 + 2, 13, col, false);
+
+    // Steam — three short wavy strokes above the mug.
+    const int sy = bodyY - 22;
+    for (int i = -1; i <= 1; i++) {
+        int sx = cx + i * 14;
+        Nextion::drawLine(sx,     sy + 10, sx - 4, sy + 2,  col);
+        Nextion::drawLine(sx - 4, sy + 2,  sx + 2, sy - 6,  col);
+        Nextion::drawLine(sx + 2, sy - 6,  sx - 2, sy - 14, col);
+    }
+}
+
+static void drawSleepScreen() {
+    Nextion::clear(COL_BLACK);
+    bool fromIdle = (sSleepWakeTo == SCR_IDLE);
+    bool paused   = fromIdle ? true : sPaused;     // idle = coffee always
+    if (paused) drawCoffeeIcon(DISP_W / 2, DISP_H / 2);
+    else        drawStopwatchIcon(DISP_W / 2, DISP_H / 2);
+    sSleepDrawnAsPaused = paused;
+    sSleepDrawnFromIdle = fromIdle;
+}
+
+static void enterSleep() {
+    sSleepWakeTo = sScreen;
+    goTo(SCR_SLEEP);
+}
+
+static void wakeFromSleep() {
+    sLastTouchMs = millis();
+    goTo(sSleepWakeTo);
+}
+
+// Is the current screen one we're allowed to auto-sleep from?
+static bool screenIsSleepable() {
+    if (sScreen == SCR_RUNNING) return true;
+    if (sScreen == SCR_IDLE && Settings::sleepOnIdle()) return true;
+    return false;
+}
+
+static void onTouchSleep(const NextionTouch& /*t*/) {
+    // Any tap anywhere wakes the display.
+    wakeFromSleep();
+}
+
 static void drawDiscardConfirmScreen() {
     Nextion::clear(COL_BG);
 
@@ -693,6 +814,7 @@ static void onTouchProject(const NextionTouch& t) {
     Entity& p = sProjects[hit];
     sSelProject     = p.id;
     sSelProjectName = p.name;
+    sSelProjectHex  = p.color;
     sAppCount   = Api::fetchApps(sApps, MAX_ENTITIES);
     sAppOffset  = 0;     // fresh app list
     goTo(SCR_APP);
@@ -808,6 +930,25 @@ void tick() {
         goTo(sToastNext);
     }
 
+    // Auto-sleep transition: if the active screen allows sleep and the user
+    // hasn't touched anything for `sleepTimeoutSec()` seconds, dim the
+    // display to the icon-only sleep view.
+    uint16_t sleepSec = Settings::sleepTimeoutSec();
+    if (sleepSec > 0 && screenIsSleepable() &&
+        (millis() - sLastTouchMs) >= (uint32_t)sleepSec * 1000UL) {
+        enterSleep();
+    }
+
+    // While the sleep view is up, swap the icon if running ↔ paused state
+    // flipped underneath us (e.g. a dashboard-driven pause/continue).
+    if (sScreen == SCR_SLEEP) {
+        bool fromIdle = (sSleepWakeTo == SCR_IDLE);
+        bool paused   = fromIdle ? true : sPaused;
+        if (paused != sSleepDrawnAsPaused || fromIdle != sSleepDrawnFromIdle) {
+            sDirty = true;
+        }
+    }
+
     if (sDirty) {
         switch (sScreen) {
             case SCR_BOOT:            /* drawn by showBootMessage */ break;
@@ -820,6 +961,7 @@ void tick() {
             case SCR_DISCARD_CONFIRM: drawDiscardConfirmScreen(); break;
             case SCR_SETTINGS:        drawSettingsScreen();       break;
             case SCR_TOAST:           drawToastScreen();          break;
+            case SCR_SLEEP:           drawSleepScreen();          break;
         }
         sDirty = false;
     }
@@ -843,6 +985,7 @@ void tick() {
 
 void handleTouch(const NextionTouch& t) {
     if (!t.pressed) return;  // act on press, ignore release
+    sLastTouchMs = millis();
     switch (sScreen) {
         case SCR_IDLE:            onTouchIdle(t);           break;
         case SCR_CLIENT:          onTouchClient(t);         break;
@@ -852,6 +995,7 @@ void handleTouch(const NextionTouch& t) {
         case SCR_CONFIRM:         onTouchConfirm(t);        break;
         case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
         case SCR_SETTINGS:        onTouchSettings(t);       break;
+        case SCR_SLEEP:           onTouchSleep(t);          break;
         default: break;
     }
 }
@@ -882,6 +1026,17 @@ LiveSnapshot getLiveSnapshot() {
         case SCR_SETTINGS:        s.state = "idle";       s.screen = "settings";        break;
         case SCR_TOAST:           s.state = "idle";       s.screen = "toast";           break;
         case SCR_BOOT:            s.state = "boot";       s.screen = "boot";            break;
+        case SCR_SLEEP:
+            // Report the underlying activity so the dashboard's "live" view
+            // still reads "running" / "paused" / "idle" — only the on-device
+            // screen is dimmed, the session itself didn't change state.
+            if (sSleepWakeTo == SCR_RUNNING) {
+                s.state = sPaused ? "paused" : "running";
+            } else {
+                s.state = "idle";
+            }
+            s.screen = "sleep";
+            break;
     }
 
     s.clientId    = sSelClient;
@@ -889,6 +1044,7 @@ LiveSnapshot getLiveSnapshot() {
     s.clientColor = sSelClientHex;
     s.projectId   = sSelProject;
     s.projectName = sSelProjectName;
+    s.projectColor = sSelProjectHex;
     s.appId       = sSelApp;
     s.appName     = sSelAppName;
     s.startIso    = sStartIso;

@@ -130,12 +130,21 @@ def create_app():
     basedir = os.path.abspath(os.path.dirname(__file__))
     static_dir = os.path.join(basedir, 'static')
 
+    # One-time migration: the SQLite file was renamed from "nixie.db" to
+    # "lixie.db" when the project's user-facing name changed. If an upgrade
+    # leaves the old file in place and the new one missing, promote the old
+    # one so the user's data carries over without manual intervention.
+    instance_dir = os.path.join(basedir, 'instance')
+    os.makedirs(instance_dir, exist_ok=True)
+    old_db = os.path.join(instance_dir, 'nixie.db')
+    new_db = os.path.join(instance_dir, 'lixie.db')
+    if os.path.exists(old_db) and not os.path.exists(new_db):
+        os.rename(old_db, new_db)
+
     # static_folder=None disables Flask's built-in static handler so our
     # SPA catch-all route runs for every non-API path instead of getting a 404.
     app = Flask(__name__, static_folder=None)
-    app.config['SQLALCHEMY_DATABASE_URI'] = (
-        'sqlite:///' + os.path.join(basedir, 'instance', 'lixie.db')
-    )
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + new_db
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     CORS(app, resources={r'/api/*': {'origins': '*'}})
@@ -499,21 +508,37 @@ def create_app():
         db.session.commit()
         return jsonify(device.to_dict())
 
+    # Fields the firmware actually consumes when we push settings over the
+    # WebSocket — kept in one place so the dashboard-only link flag and any
+    # future helper fields can't accidentally leak to the device.
+    _DEVICE_SETTING_KEYS = (
+        'color',
+        'colon_color',
+        'brightness',
+        'display_brightness',
+        'sleep_timeout_sec',
+        'sleep_on_idle',
+    )
+
     @app.route('/api/v1/devices/<int:did>/settings', methods=['GET', 'PUT'])
     def device_settings(did):
-        """Read or push LED matrix settings to a device.
+        """Read or push LED + display settings to a device.
 
         Tracked fields:
-          - color         clock / stopwatch digit colour ("#RRGGBB")
-          - colon_color   the two blinking colon dots ("#RRGGBB")
-          - colon_linked  when True the colon mirrors `color` automatically;
-                          when False `colon_color` is user-picked
-          - brightness    0..255 (single global FastLED brightness)
+          - color              clock / stopwatch digit colour ("#RRGGBB")
+          - colon_color        the two blinking colon dots    ("#RRGGBB")
+          - colon_linked       when True the colon mirrors `color`
+                                automatically; when False `colon_color`
+                                is user-picked
+          - brightness         0..255 (LED matrix brightness)
+          - display_brightness 0..100 (% Nextion backlight; 0 = off)
+          - sleep_timeout_sec  0..65535 (seconds, 0 disables auto-sleep)
+          - sleep_on_idle      bool — also apply timeout from the idle screen
 
         Settings are cached server-side so they survive both dashboard
         refreshes and brief device disconnects — when the device next sends a
-        state message we resend the latest cached values. The device sees
-        only `color`, `colon_color`, `brightness` — the link flag stays here.
+        state message we resend the latest cached values. The dashboard-only
+        `colon_linked` flag is stripped before pushing to the device.
         """
         device = db.get_or_404(Device, did)
         hw_id  = device.hardware_id
@@ -523,27 +548,30 @@ def create_app():
                 cached = _device_settings.get(hw_id, {})
                 online = hw_id in _device_sockets
             return jsonify({
-                'hardware_id':  hw_id,
-                'color':        cached.get('color'),
-                'colon_color':  cached.get('colon_color'),
-                'colon_linked': cached.get('colon_linked', True),
-                'brightness':   cached.get('brightness'),
-                'online':       online,
+                'hardware_id':        hw_id,
+                'color':              cached.get('color'),
+                'colon_color':        cached.get('colon_color'),
+                'colon_linked':       cached.get('colon_linked', True),
+                'brightness':         cached.get('brightness'),
+                'display_brightness': cached.get('display_brightness'),
+                'sleep_timeout_sec':  cached.get('sleep_timeout_sec'),
+                'sleep_on_idle':      cached.get('sleep_on_idle', False),
+                'online':             online,
             })
 
         data = request.get_json() or {}
         update = {}
 
+        def _check_hex(key, label):
+            v = (data[key] or '').strip()
+            if not (len(v) == 7 and v.startswith('#')):
+                abort(400, description=f"{label} must be #RRGGBB")
+            return v.upper()
+
         if 'color' in data:
-            c = (data['color'] or '').strip()
-            if not (len(c) == 7 and c.startswith('#')):
-                abort(400, description="color must be #RRGGBB")
-            update['color'] = c.upper()
+            update['color'] = _check_hex('color', 'color')
         if 'colon_color' in data:
-            c = (data['colon_color'] or '').strip()
-            if not (len(c) == 7 and c.startswith('#')):
-                abort(400, description="colon_color must be #RRGGBB")
-            update['colon_color'] = c.upper()
+            update['colon_color'] = _check_hex('colon_color', 'colon_color')
         if 'colon_linked' in data:
             update['colon_linked'] = bool(data['colon_linked'])
         if 'brightness' in data:
@@ -554,6 +582,24 @@ def create_app():
             if b < 0 or b > 255:
                 abort(400, description="brightness must be 0..255")
             update['brightness'] = b
+        if 'display_brightness' in data:
+            try:
+                p = int(data['display_brightness'])
+            except Exception:
+                abort(400, description="display_brightness must be an integer")
+            if p < 0 or p > 100:
+                abort(400, description="display_brightness must be 0..100")
+            update['display_brightness'] = p
+        if 'sleep_timeout_sec' in data:
+            try:
+                s = int(data['sleep_timeout_sec'])
+            except Exception:
+                abort(400, description="sleep_timeout_sec must be an integer")
+            if s < 0 or s > 65535:
+                abort(400, description="sleep_timeout_sec must be 0..65535")
+            update['sleep_timeout_sec'] = s
+        if 'sleep_on_idle' in data:
+            update['sleep_on_idle'] = bool(data['sleep_on_idle'])
         if not update:
             abort(400, description="nothing to update")
 
@@ -568,10 +614,10 @@ def create_app():
                 merged['colon_color'] = merged['color']
             _device_settings[hw_id] = merged
 
-        # The device payload never includes the link flag — only the resolved
-        # colours and brightness.
+        # The device payload never includes the dashboard-only link flag —
+        # only the resolved keys the firmware actually reads.
         device_payload = {'type': 'settings'}
-        for k in ('color', 'colon_color', 'brightness'):
+        for k in _DEVICE_SETTING_KEYS:
             if k in merged:
                 device_payload[k] = merged[k]
         delivered = _send_to_device(hw_id, device_payload)
@@ -812,7 +858,7 @@ def create_app():
                     # only handles resolved colours and brightness.
                     if first_msg and cached_settings:
                         payload = {'type': 'settings'}
-                        for k in ('color', 'colon_color', 'brightness'):
+                        for k in _DEVICE_SETTING_KEYS:
                             if k in cached_settings:
                                 payload[k] = cached_settings[k]
                         try:

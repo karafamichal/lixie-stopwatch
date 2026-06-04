@@ -167,4 +167,9 @@ void drawTextSty(int x, int y, int w, int h,
          align_h, align_v, sty, escape(text).c_str());
 }
 
+void setDim(uint8_t pct) {
+    if (pct > 100) pct = 100;
+    cmdf("dim=%u", (unsigned)pct);
+}
+
 }  // namespace Nextion

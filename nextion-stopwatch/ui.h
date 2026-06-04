@@ -25,7 +25,8 @@ enum Screen {
     SCR_CONFIRM,
     SCR_DISCARD_CONFIRM,
     SCR_SETTINGS,
-    SCR_TOAST
+    SCR_TOAST,
+    SCR_SLEEP          // dim auto-sleep view; touch anywhere wakes back
 };
 
 // Show a one-line status while booting (WiFi, NTP, ...).
@@ -55,12 +56,13 @@ void toast(const String& message, uint16_t ms = 1500, Screen nextScreen = SCR_ID
 // to the dashboard so multiple users can watch live sessions.
 struct LiveSnapshot {
     const char* state;            // "idle"|"selecting"|"running"|"paused"|"confirm"
-    const char* screen;            // "idle"|"client"|"project"|"app"|"running"|"confirm"|"discard_confirm"|"settings"|"toast"|"boot"
+    const char* screen;            // "idle"|"client"|"project"|"app"|"running"|"confirm"|"discard_confirm"|"settings"|"toast"|"boot"|"sleep"
     int      clientId;            // -1 if none
     String   clientName;
     String   clientColor;         // "#RRGGBB", empty if none
     int      projectId;           // -1 if none
     String   projectName;
+    String   projectColor;        // "#RRGGBB", empty if none
     int      appId;               // -1 if none
     String   appName;
     String   startIso;            // empty if no active session

@@ -37,13 +37,16 @@ export default function Devices() {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Matrix settings editor
-  const [settingsTarget, setSettingsTarget] = useState(null);
-  const [settingsColor,  setSettingsColor]  = useState('#FF8000');
-  const [settingsColon,  setSettingsColon]  = useState('#FF8000');
-  const [settingsLinked, setSettingsLinked] = useState(true);
-  const [settingsBright, setSettingsBright] = useState(150);
-  const [settingsBusy,   setSettingsBusy]   = useState(false);
-  const [settingsFlash,  setSettingsFlash]  = useState('');
+  const [settingsTarget,    setSettingsTarget]    = useState(null);
+  const [settingsColor,     setSettingsColor]     = useState('#FF8000');
+  const [settingsColon,     setSettingsColon]     = useState('#FF8000');
+  const [settingsLinked,    setSettingsLinked]    = useState(true);
+  const [settingsBright,    setSettingsBright]    = useState(150);
+  const [settingsDispBri,   setSettingsDispBri]   = useState(100);     // 0..100 %
+  const [settingsSleepSec,  setSettingsSleepSec]  = useState(30);
+  const [settingsSleepIdle, setSettingsSleepIdle] = useState(false);
+  const [settingsBusy,      setSettingsBusy]      = useState(false);
+  const [settingsFlash,     setSettingsFlash]     = useState('');
 
   // Live presence + full last state — hardware_id -> { ...device_state, _ts }.
   const [liveStates, setLiveStates] = useState({});
@@ -149,15 +152,21 @@ export default function Devices() {
     try {
       const s = await api.devices.getSettings(d.id);
       const c = s.color || '#FF8000';
-      setSettingsColor (c);
-      setSettingsColon (s.colon_color || c);
-      setSettingsLinked(s.colon_linked !== false);   // default true
-      setSettingsBright(s.brightness != null ? s.brightness : 150);
+      setSettingsColor    (c);
+      setSettingsColon    (s.colon_color || c);
+      setSettingsLinked   (s.colon_linked !== false);                          // default true
+      setSettingsBright   (s.brightness         != null ? s.brightness         : 150);
+      setSettingsDispBri  (s.display_brightness != null ? s.display_brightness : 100);
+      setSettingsSleepSec (s.sleep_timeout_sec  != null ? s.sleep_timeout_sec  : 30);
+      setSettingsSleepIdle(s.sleep_on_idle === true);
     } catch {
       setSettingsColor('#FF8000');
       setSettingsColon('#FF8000');
       setSettingsLinked(true);
       setSettingsBright(150);
+      setSettingsDispBri(100);
+      setSettingsSleepSec(30);
+      setSettingsSleepIdle(false);
     } finally {
       setSettingsBusy(false);
     }
@@ -168,9 +177,12 @@ export default function Devices() {
     setSettingsFlash('');
     try {
       const payload = {
-        color:        settingsColor,
-        brightness:   settingsBright,
-        colon_linked: settingsLinked,
+        color:              settingsColor,
+        brightness:         settingsBright,
+        colon_linked:       settingsLinked,
+        display_brightness: settingsDispBri,
+        sleep_timeout_sec:  settingsSleepSec,
+        sleep_on_idle:      settingsSleepIdle,
       };
       // When unlinked, send the user's colon choice; when linked, the server
       // mirrors `color` so we don't need to send colon_color at all.
@@ -362,7 +374,7 @@ export default function Devices() {
           </div>
 
           <div>
-            <p className="label mb-2">Brightness</p>
+            <p className="label mb-2">LED matrix brightness</p>
             <div className="grid grid-cols-4 gap-2">
               {BRIGHTNESS_LEVELS.map((b, i) => {
                 const active = findBrightnessIdx(settingsBright) === i;
@@ -383,6 +395,69 @@ export default function Devices() {
               })}
             </div>
             <p className="text-xs text-slate-500 mt-1">Current: {settingsBright} / 255</p>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-2">
+              <p className="label mb-0">Touch display brightness</p>
+              <span className="text-xs text-slate-500">
+                {settingsDispBri === 0 ? 'display off' : `${settingsDispBri} %`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={settingsDispBri}
+              onChange={e => setSettingsDispBri(parseInt(e.target.value, 10))}
+              className="w-full accent-amber-500"
+              aria-label="Touch display brightness percent"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <p className="label mb-0">Auto-sleep</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={0}
+                max={3600}
+                step={5}
+                value={settingsSleepSec}
+                onChange={e => {
+                  const v = parseInt(e.target.value, 10);
+                  setSettingsSleepSec(Number.isFinite(v) && v >= 0 ? v : 0);
+                }}
+                className="input w-24"
+              />
+              <span className="text-xs text-slate-400">
+                seconds idle before the screen shows just an icon
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              0 disables auto-sleep. While running: stopwatch icon. While paused: coffee cup.
+            </p>
+            <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
+              <span className="text-sm text-slate-300">
+                Also sleep from the idle / home screen (shows the coffee cup)
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settingsSleepIdle}
+                onClick={() => setSettingsSleepIdle(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                  settingsSleepIdle ? 'bg-amber-500' : 'bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settingsSleepIdle ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
           </div>
 
           {settingsFlash && (

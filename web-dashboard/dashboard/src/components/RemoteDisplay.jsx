@@ -81,15 +81,19 @@ function Label({ x, y, w, h, color = COL.text, bg = 'transparent', size = 14, we
   );
 }
 
-// The orange home tile drawn on every non-idle screen — y=4 normally, y=12
-// on the running screen.
+// Home icon — no backdrop tile, just the orange house glyph rendered on top
+// of whatever the header strip already drew. Matches drawHomeButton() in
+// ui.cpp, which lost its orange tile when the design moved to icon-only.
 function HomeButton({ y = 4 }) {
   return (
-    <Rect x={HOME_X} y={y} w={HOME_W} h={HOME_H} bg={COL.accent}>
-      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: COL.white, fontWeight: 700, fontSize: 16 }}>
-        ⌂
-      </div>
-    </Rect>
+    <div style={{
+      position: 'absolute',
+      left: HOME_X, top: y, width: HOME_W, height: HOME_H,
+      display: 'grid', placeItems: 'center',
+      color: COL.accent, fontWeight: 700, fontSize: 20,
+    }}>
+      ⌂
+    </div>
   );
 }
 
@@ -120,11 +124,20 @@ function IdleScreen({ state }) {
   const news = state?.news_headline ? `* ${state.news_headline}` : 'Loading news…';
   return (
     <>
-      <Label x={0} y={4} w={DISP_W} h={38} size={22} weight={700} color={COL.accent}>LIXIE STOPWATCH</Label>
-      {/* "..." settings tile */}
-      <Rect x={HOME_X} y={4} w={HOME_W} h={HOME_H} bg={COL.panel} border={COL.accent}>
-        <Label x={0} y={0} w={HOME_W} h={HOME_H} size={20} color={COL.accent} weight={700}>…</Label>
-      </Rect>
+      <Label x={0} y={4} w={HOME_X} h={38} size={22} weight={700} color={COL.accent}>LIXIE STOPWATCH</Label>
+      {/* Hamburger settings glyph (three horizontal bars) — icon only, no
+          backdrop, matching drawIdleSettingsButton() in ui.cpp. */}
+      <div style={{
+        position: 'absolute',
+        left: HOME_X, top: 4, width: HOME_W, height: HOME_H,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 5,
+        pointerEvents: 'none',
+      }}>
+        <span style={{ width: 22, height: 4, borderRadius: 1, background: COL.accent }} />
+        <span style={{ width: 22, height: 4, borderRadius: 1, background: COL.accent }} />
+        <span style={{ width: 22, height: 4, borderRadius: 1, background: COL.accent }} />
+      </div>
 
       {/* Weather strip — actual data from the device's last fetch */}
       <Rect x={20} y={48} w={DISP_W - 40} h={36} bg={COL.panel}>
@@ -138,10 +151,21 @@ function IdleScreen({ state }) {
         {news}
       </Label>
 
-      {/* TAP TO START button */}
-      <Rect x={60} y={148} w={DISP_W - 120} h={52} bg={COL.accent}>
-        <Label x={0} y={0} w={DISP_W - 120} h={52} size={22} weight={700} color={COL.black}>TAP TO START</Label>
-      </Rect>
+      {/* "START" pill button — same bbox as the firmware (60,148,280,52)
+          with fully rounded ends (borderRadius = half the height = 26 px),
+          matching drawIdle() in ui.cpp. */}
+      <div style={{
+        position: 'absolute',
+        left:  60,
+        top:   148,
+        width:  DISP_W - 120,
+        height: 52,
+        borderRadius: 26,
+        background: COL.accent,
+        display: 'grid', placeItems: 'center',
+      }}>
+        <span style={{ color: COL.black, fontWeight: 700, fontSize: 22 }}>START</span>
+      </div>
 
       {/* Footer date — also pushed by firmware */}
       <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>
@@ -230,6 +254,8 @@ function fmtHMS(secs) {
 function RunningScreen({ state }) {
   const accent = state?.client_color || COL.accent;
   const paused = !!state?.paused;
+  const subtitle = (paused ? 'PAUSED' : 'RUNNING')
+    + (state?.app_name ? `   ${state.app_name}` : '');
   return (
     <>
       {/* Top context strip (56 px) */}
@@ -238,21 +264,25 @@ function RunningScreen({ state }) {
       <Label x={8} y={4} w={DISP_W - 16 - (HOME_W + 8)} h={24} size={14} weight={600} align="left">
         {state?.client_name || '—'}
       </Label>
-      <Label x={8} y={30} w={DISP_W - 16 - (HOME_W + 8)} h={22} size={11} color={COL.muted} align="left">
-        {state?.project_name || '—'}{state?.app_name ? `   ${state.app_name}` : '   (no app)'}
+      <Label x={8} y={30} w={DISP_W - 16 - (HOME_W + 8)} h={22} size={11}
+             color={paused ? COL.red : COL.green} align="left">
+        {subtitle}
       </Label>
       <HomeButton y={12} />
 
+      {/* Project name now sits where RUNNING/PAUSED used to — rendered in
+          the project's own colour so the session is instantly recognisable. */}
       <Label x={0} y={66} w={DISP_W} h={38} size={22} weight={700}
-             color={paused ? COL.red : COL.green}>
-        {paused ? 'PAUSED' : 'RUNNING'}
+             color={state?.project_color || COL.text}>
+        {state?.project_name || '—'}
       </Label>
       <Label x={0} y={112} w={DISP_W} h={30} size={14}>
         Elapsed: {fmtHMS(state?.elapsed_seconds)}
       </Label>
 
-      {/* Pause / Continue (left) */}
-      <Rect x={20} y={162} w={170} h={58} bg={paused ? COL.green : COL.blue}>
+      {/* Pause / Continue (left). PAUSE = neutral grey #6B6B6B to match
+          the firmware (COL_GREY); CONTINUE stays green for the affordance. */}
+      <Rect x={20} y={162} w={170} h={58} bg={paused ? COL.green : '#6B6B6B'}>
         <Label x={0} y={0} w={170} h={58} size={paused ? 16 : 22} weight={700}
                color={paused ? COL.black : COL.white}>
           {paused ? 'CONTINUE' : 'PAUSE'}
@@ -360,6 +390,57 @@ function BootScreen() {
   );
 }
 
+// Stopwatch glyph rendered as inline SVG — used when the device sleeps mid-
+// running session. Mirrors drawStopwatchIcon() in ui.cpp.
+function StopwatchGlyph() {
+  return (
+    <svg viewBox="0 0 100 100" width={120} height={120}>
+      <g fill="none" stroke={COL.accent} strokeWidth="4">
+        <circle cx="50" cy="55" r="34" />
+        <line x1="50" y1="55" x2="50" y2="30" />
+        <line x1="50" y1="55" x2="68" y2="55" />
+        <line x1="50" y1="21" x2="50" y2="14" />
+      </g>
+      <rect x="46" y="10"  width="8" height="6" fill={COL.accent} />
+      <circle cx="50" cy="55" r="3" fill={COL.accent} />
+    </svg>
+  );
+}
+
+// Coffee-cup glyph rendered as inline SVG — used when paused or when the
+// idle screen has gone to sleep. Mirrors drawCoffeeIcon() in ui.cpp.
+function CoffeeGlyph() {
+  return (
+    <svg viewBox="0 0 100 100" width={120} height={120}>
+      <g fill="none" stroke={COL.accent} strokeWidth="4">
+        <rect x="22" y="40" width="50" height="42" />
+        <line x1="28" y1="48" x2="66" y2="48" />
+        <circle cx="78" cy="60" r="10" />
+        {/* Steam wisps */}
+        <path d="M34 32 Q30 26 34 22 Q38 18 34 12" />
+        <path d="M50 32 Q46 26 50 22 Q54 18 50 12" />
+        <path d="M66 32 Q62 26 66 22 Q70 18 66 12" />
+      </g>
+    </svg>
+  );
+}
+
+function SleepScreen({ state }) {
+  // Pick the icon from the underlying state — running session shows the
+  // stopwatch, paused / idle-sleep show the coffee cup. The container is
+  // fully black to match Nextion's drawSleepScreen().
+  const paused = state?.state === 'paused' || state?.state === 'idle';
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      background: '#000',
+      display: 'grid', placeItems: 'center',
+    }}>
+      {paused ? <CoffeeGlyph /> : <StopwatchGlyph />}
+    </div>
+  );
+}
+
 function ScreenContent({ screen, state }) {
   switch (screen) {
     case 'idle':            return <IdleScreen state={state} />;
@@ -372,6 +453,7 @@ function ScreenContent({ screen, state }) {
     case 'settings':        return <SettingsScreen />;
     case 'toast':           return <ToastScreen state={state} />;
     case 'boot':            return <BootScreen />;
+    case 'sleep':           return <SleepScreen state={state} />;
     default:                return <IdleScreen state={state} />;
   }
 }

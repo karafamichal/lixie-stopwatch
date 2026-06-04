@@ -64,6 +64,12 @@ void drawTextSty(int x, int y, int w, int h,
 // Escape any " inside the string so the Nextion parser stays happy.
 String escape(const String& s);
 
+// --- Backlight / sleep ------------------------------------------------------
+
+// Set backlight brightness as a percentage (0..100). 0 turns the backlight
+// completely off, leaving the controller still responsive to commands.
+void setDim(uint8_t pct);
+
 }  // namespace Nextion
 
 #endif

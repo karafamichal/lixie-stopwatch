@@ -2,6 +2,7 @@
 #include "config.h"
 #include "ui.h"
 #include "settings.h"
+#include "lang.h"
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
@@ -34,7 +35,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
             //     "brightness":         0..255,      // LED matrix brightness
             //     "display_brightness": 0..100,      // Nextion backlight %
             //     "sleep_timeout_sec":  0..65535,    // 0 disables auto-sleep
-            //     "sleep_on_idle":      bool }      // sleep from idle too
+            //     "sleep_on_idle":      bool,       // sleep from idle too
+            //     "language":           "en"|"de" }  // Nextion UI language
             JsonDocument doc;
             DeserializationError err = deserializeJson(doc, payload, length);
             if (err) {
@@ -70,13 +72,21 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
                 if (doc["sleep_on_idle"].is<bool>()) {
                     Settings::setSleepOnIdle(doc["sleep_on_idle"].as<bool>());
                 }
-                Serial.printf("[ws] settings applied clock=%s colon=%s bright=%u disp=%u sleep=%u idle=%d\n",
+                if (doc["language"].is<const char*>()) {
+                    Language l = Lang::fromCode(doc["language"].as<const char*>());
+                    if (l != Settings::language()) {
+                        Settings::setLanguage(l);
+                        UI::redraw();   // repaint the current screen in the new language
+                    }
+                }
+                Serial.printf("[ws] settings applied clock=%s colon=%s bright=%u disp=%u sleep=%u idle=%d lang=%s\n",
                               Settings::clockColorHex().c_str(),
                               Settings::colonColorHex().c_str(),
                               Settings::brightness(),
                               Settings::displayBrightness(),
                               Settings::sleepTimeoutSec(),
-                              (int)Settings::sleepOnIdle());
+                              (int)Settings::sleepOnIdle(),
+                              Lang::code(Settings::language()));
             } else if (strcmp(msgType, "remote_touch") == 0) {
                 // Remote control — inject a synthetic touch as if the user
                 // had pressed/released the physical Nextion at (x,y).
@@ -108,6 +118,9 @@ static void pushState() {
     doc["screen"]          = s.screen;
     doc["paused"]          = s.paused;
     doc["elapsed_seconds"] = s.elapsedSec;
+    // Lets the dashboard mirror render its labels in the same language as
+    // the physical screen.
+    doc["language"]        = Lang::code(Settings::language());
     if (s.clientId >= 0) {
         doc["client_id"]    = s.clientId;
         doc["client_name"]  = s.clientName;

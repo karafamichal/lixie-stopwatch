@@ -40,6 +40,94 @@ const HOME_X = DISP_W - 44;
 const HOME_W = 40;
 const HOME_H = 32;
 
+// Match BACK_X / BACK_W in ui.cpp (widened so "< Zurueck" fits).
+const BACK_X = 8;
+const BACK_W = 80;
+
+// On-screen labels, keyed the same way as nextion-stopwatch/lang.cpp. The
+// device tells us which language it is showing via `state.language`, so the
+// mirror always reads the same as the physical panel. The firmware's fonts
+// are ASCII-only, hence "Zurueck" instead of "Zurück" — we reproduce that
+// faithfully rather than prettify it.
+const STRINGS = {
+  en: {
+    back:              '< Back',
+    weatherUnavail:    'Weather unavailable',
+    newsLoading:       'Loading news…',
+    start:             'START',
+    selectClient:      'Select client',
+    noItems:           'No items available',
+    tapRow:            'Tap a row to continue',
+    of:                'of',
+    skipApp:           'Skip app',
+    paused:            'PAUSED',
+    running:           'RUNNING',
+    elapsed:           'Elapsed:',
+    cont:              'CONTINUE',
+    pause:             'PAUSE',
+    stop:              'STOP',
+    saveSessionQ:      'Save session?',
+    noApp:             '(no app)',
+    duration:          'Duration:',
+    discard:           'Discard',
+    save:              'Save',
+    discardSessionQ:   'Discard session?',
+    timeLost:          'All elapsed time will be lost.',
+    tracked:           'Tracked:',
+    noKeep:            'No, keep',
+    yesDiscard:        'Yes, discard',
+    settings:          'Settings',
+    clockColour:       'Clock colour:',
+    brightness:        'Brightness:',
+    language:          'Language:',
+    brightLabels:      ['Low', 'Med', 'High', 'Max'],
+    cancel:            'Cancel',
+    booting:           'Booting…',
+  },
+  de: {
+    back:              '< Zurueck',
+    weatherUnavail:    'Wetterdaten fehlen',
+    newsLoading:       'Nachrichten laden…',
+    start:             'START',
+    selectClient:      'Kunde waehlen',
+    noItems:           'Keine Eintraege vorhanden',
+    tapRow:            'Zeile antippen, um fortzufahren',
+    of:                'von',
+    skipApp:           'Ohne App',
+    paused:            'PAUSIERT',
+    running:           'AKTIV',
+    elapsed:           'Dauer:',
+    cont:              'WEITER',
+    pause:             'PAUSE',
+    stop:              'STOPP',
+    saveSessionQ:      'Sitzung speichern?',
+    noApp:             '(keine App)',
+    duration:          'Dauer:',
+    discard:           'Verwerfen',
+    save:              'Speichern',
+    discardSessionQ:   'Zeit verwerfen?',
+    timeLost:          'Die erfasste Zeit geht verloren.',
+    tracked:           'Erfasst:',
+    noKeep:            'Behalten',
+    yesDiscard:        'Verwerfen',
+    settings:          'Einstellungen',
+    clockColour:       'Uhrfarbe:',
+    brightness:        'Helligkeit:',
+    language:          'Sprache:',
+    brightLabels:      ['Min', 'Mittel', 'Hoch', 'Max'],
+    cancel:            'Abbrechen',
+    booting:           'Startet…',
+  },
+};
+
+// Native names shown on the device's language buttons — same for every UI
+// language, matching Lang::name() in the firmware.
+const LANGUAGE_NAMES = ['English', 'Deutsch'];
+
+function strings(state) {
+  return STRINGS[state?.language] || STRINGS.en;
+}
+
 // ── small primitives ─────────────────────────────────────────────────────────
 
 function Rect({ x, y, w, h, bg, border, children, style, ...rest }) {
@@ -97,17 +185,18 @@ function HomeButton({ y = 4 }) {
   );
 }
 
-function Header({ title, showBack = false }) {
+function Header({ title, showBack = false, t = STRINGS.en }) {
+  const titleX = showBack ? BACK_X + BACK_W + 8 : 12;
   return (
     <>
       <Rect x={0} y={0} w={DISP_W} h={40} bg={COL.panel} />
       <Rect x={0} y={40} w={DISP_W} h={1} bg={COL.accent} />
       {showBack && (
-        <Rect x={8} y={6} w={64} h={28} bg={COL.bg}>
-          <Label x={0} y={0} w={64} h={28} size={11}>&lt; Back</Label>
+        <Rect x={BACK_X} y={6} w={BACK_W} h={28} bg={COL.bg}>
+          <Label x={0} y={0} w={BACK_W} h={28} size={11}>{t.back}</Label>
         </Rect>
       )}
-      <Label x={showBack ? 80 : 12} y={6} w={DISP_W - (showBack ? 80 : 12) - (HOME_W + 8)} h={28}
+      <Label x={titleX} y={6} w={DISP_W - titleX - (HOME_W + 8)} h={28}
              size={14} weight={600} align="left">{title}</Label>
       <HomeButton y={4} />
     </>
@@ -117,11 +206,12 @@ function Header({ title, showBack = false }) {
 // ── per-screen renderers ─────────────────────────────────────────────────────
 
 function IdleScreen({ state }) {
+  const t = strings(state);
   const w = state?.weather;
   const weatherText = w
     ? `${w.city || ''}   ${typeof w.temp_c === 'number' ? w.temp_c.toFixed(1) : '–'} °C   ${w.condition || ''}`.trim()
-    : 'Weather unavailable';
-  const news = state?.news_headline ? `* ${state.news_headline}` : 'Loading news…';
+    : t.weatherUnavail;
+  const news = state?.news_headline ? `* ${state.news_headline}` : t.newsLoading;
   return (
     <>
       <Label x={0} y={4} w={HOME_X} h={38} size={22} weight={700} color={COL.accent}>LIXIE STOPWATCH</Label>
@@ -164,7 +254,7 @@ function IdleScreen({ state }) {
         background: COL.accent,
         display: 'grid', placeItems: 'center',
       }}>
-        <span style={{ color: COL.black, fontWeight: 700, fontSize: 22 }}>START</span>
+        <span style={{ color: COL.black, fontWeight: 700, fontSize: 22 }}>{t.start}</span>
       </div>
 
       {/* Footer date — also pushed by firmware */}
@@ -202,7 +292,8 @@ function ListRow({ y, item }) {
   );
 }
 
-function ListScreen({ title, state, visibleN = 4 }) {
+function ListScreen({ title, state, visibleN = 4, showBack = false }) {
+  const t       = strings(state);
   const rows    = state?.list_rows || [];
   const offset  = state?.list_offset ?? 0;
   const count   = state?.list_count ?? rows.length;
@@ -210,13 +301,13 @@ function ListScreen({ title, state, visibleN = 4 }) {
   const empty   = count === 0;
   return (
     <>
-      <Header title={title} />
+      <Header title={title} showBack={showBack} t={t} />
       {visible.map((item, i) => (
         <ListRow key={i} y={52 + i * 44} item={item} />
       ))}
       {empty && (
         <Label x={12} y={52} w={376} h={44} size={13} color={COL.muted}>
-          No items available
+          {t.noItems}
         </Label>
       )}
       {/* Scroll up / down buttons */}
@@ -228,8 +319,8 @@ function ListScreen({ title, state, visibleN = 4 }) {
       </Rect>
       <Label x={0} y={DISP_H - 18} w={DISP_W} h={18} size={11} color={COL.muted}>
         {count > visibleN
-          ? `${offset + 1}–${Math.min(offset + visibleN, count)} of ${count}`
-          : `Tap a row to continue`}
+          ? `${offset + 1}–${Math.min(offset + visibleN, count)} ${t.of} ${count}`
+          : t.tapRow}
       </Label>
     </>
   );
@@ -243,33 +334,37 @@ function crumb(...parts) {
 }
 
 function CategoryScreen({ state }) {
+  const t = strings(state);
   return (
     <>
       <ListScreen
         title={crumb(state?.client_name, state?.project_name)}
         state={state}
         visibleN={3}
+        showBack
       />
       {/* Skip-app button — same coords as on the app screen so users get a
           consistent place to skip selection. */}
       <Rect x={12} y={DISP_H - 44} w={120} h={30} bg={COL.panel}>
-        <Label x={0} y={0} w={120} h={30} size={12}>Skip app</Label>
+        <Label x={0} y={0} w={120} h={30} size={12}>{t.skipApp}</Label>
       </Rect>
     </>
   );
 }
 
 function AppScreen({ state }) {
+  const t = strings(state);
   return (
     <>
       <ListScreen
         title={crumb(state?.client_name, state?.project_name, state?.category_name)}
         state={state}
         visibleN={3}
+        showBack
       />
       {/* Skip-app button overlays the footer area */}
       <Rect x={12} y={DISP_H - 44} w={120} h={30} bg={COL.panel}>
-        <Label x={0} y={0} w={120} h={30} size={12}>Skip app</Label>
+        <Label x={0} y={0} w={120} h={30} size={12}>{t.skipApp}</Label>
       </Rect>
     </>
   );
@@ -282,9 +377,10 @@ function fmtHMS(secs) {
 }
 
 function RunningScreen({ state }) {
+  const t      = strings(state);
   const accent = state?.client_color || COL.accent;
   const paused = !!state?.paused;
-  const subtitle = (paused ? 'PAUSED' : 'RUNNING')
+  const subtitle = (paused ? t.paused : t.running)
     + (state?.app_name ? `   ${state.app_name}` : '');
   return (
     <>
@@ -307,7 +403,7 @@ function RunningScreen({ state }) {
         {state?.project_name || '—'}
       </Label>
       <Label x={0} y={112} w={DISP_W} h={30} size={14}>
-        Elapsed: {fmtHMS(state?.elapsed_seconds)}
+        {t.elapsed} {fmtHMS(state?.elapsed_seconds)}
       </Label>
 
       {/* Pause / Continue (left). PAUSE = neutral grey #6B6B6B to match
@@ -315,87 +411,103 @@ function RunningScreen({ state }) {
       <Rect x={20} y={162} w={170} h={58} bg={paused ? COL.green : '#6B6B6B'}>
         <Label x={0} y={0} w={170} h={58} size={paused ? 16 : 22} weight={700}
                color={paused ? COL.black : COL.white}>
-          {paused ? 'CONTINUE' : 'PAUSE'}
+          {paused ? t.cont : t.pause}
         </Label>
       </Rect>
 
       {/* Stop (right) */}
       <Rect x={210} y={162} w={170} h={58} bg={COL.red}>
-        <Label x={0} y={0} w={170} h={58} size={22} weight={700} color={COL.white}>STOP</Label>
+        <Label x={0} y={0} w={170} h={58} size={22} weight={700} color={COL.white}>{t.stop}</Label>
       </Rect>
     </>
   );
 }
 
 function ConfirmScreen({ state }) {
+  const t = strings(state);
   return (
     <>
-      <Header title="Save session?" />
+      <Header title={t.saveSessionQ} t={t} />
       <Label x={0} y={56} w={DISP_W} h={24} size={14}>
         {(state?.client_name || '—')}  /  {(state?.project_name || '—')}
       </Label>
       <Label x={0} y={82} w={DISP_W} h={20} size={11} color={COL.muted}>
-        {state?.app_name || '(no app)'}
+        {state?.app_name || t.noApp}
       </Label>
       <Label x={0} y={114} w={DISP_W} h={30} size={16} color={COL.accent} weight={600}>
-        Duration: {fmtHMS(state?.elapsed_seconds)}
+        {t.duration} {fmtHMS(state?.elapsed_seconds)}
       </Label>
       <Rect x={28} y={178} w={156} h={44} bg={COL.panel}>
-        <Label x={0} y={0} w={156} h={44} size={14} color={COL.muted}>Discard</Label>
+        <Label x={0} y={0} w={156} h={44} size={14} color={COL.muted}>{t.discard}</Label>
       </Rect>
       <Rect x={DISP_W - 184} y={178} w={156} h={44} bg={COL.green}>
-        <Label x={0} y={0} w={156} h={44} size={14} weight={700} color={COL.black}>Save</Label>
+        <Label x={0} y={0} w={156} h={44} size={14} weight={700} color={COL.black}>{t.save}</Label>
       </Rect>
     </>
   );
 }
 
 function DiscardConfirmScreen({ state }) {
+  const t = strings(state);
   return (
     <>
       <Rect x={20} y={30} w={DISP_W - 40} h={130} bg={COL.panel} />
       <Rect x={20} y={30} w={DISP_W - 40} h={1} bg={COL.red} />
       <Rect x={20} y={160} w={DISP_W - 40} h={1} bg={COL.red} />
-      <Label x={20} y={44} w={DISP_W - 40} h={36} size={20} weight={700}>Discard session?</Label>
-      <Label x={20} y={88} w={DISP_W - 40} h={26} size={13} color={COL.muted}>All elapsed time will be lost.</Label>
+      <Label x={20} y={44} w={DISP_W - 40} h={36} size={20} weight={700}>{t.discardSessionQ}</Label>
+      <Label x={20} y={88} w={DISP_W - 40} h={26} size={13} color={COL.muted}>{t.timeLost}</Label>
       <Label x={20} y={118} w={DISP_W - 40} h={28} size={14} color={COL.accent} weight={600}>
-        Tracked: {fmtHMS(state?.elapsed_seconds)}
+        {t.tracked} {fmtHMS(state?.elapsed_seconds)}
       </Label>
       <Rect x={28} y={178} w={160} h={50} bg={COL.blue}>
-        <Label x={0} y={0} w={160} h={50} size={14} weight={700} color={COL.white}>No, keep</Label>
+        <Label x={0} y={0} w={160} h={50} size={14} weight={700} color={COL.white}>{t.noKeep}</Label>
       </Rect>
       <Rect x={DISP_W - 188} y={178} w={160} h={50} bg={COL.red}>
-        <Label x={0} y={0} w={160} h={50} size={14} weight={700} color={COL.white}>Yes, discard</Label>
+        <Label x={0} y={0} w={160} h={50} size={14} weight={700} color={COL.white}>{t.yesDiscard}</Label>
       </Rect>
     </>
   );
 }
 
-function SettingsScreen() {
-  // Layout constants mirror SET_SWATCH_* / SET_BRIGHT_* / SET_BTN_* in ui.cpp.
-  const swW = 54, swH = 40, swY = 78, swGap = 4, swX0 = 28;
-  const brW = 84, brH = 36, brY = 156, brGap = 12, brX0 = 14;
-  const btnY = 200, btnW = 156, btnH = 32;
+function SettingsScreen({ state }) {
+  const t = strings(state);
+  // Layout constants mirror SET_* in ui.cpp (three rows + Save / Cancel).
+  const swW = 54, swH = 36, swY = 70, swGap = 4, swX0 = 28;
+  const brW = 84, brH = 30, brY = 138, brGap = 12, brX0 = 14;
+  const lgW = 112, lgH = 26, lgY = 174, lgGap = 8;
+  const lgX0 = DISP_W - 20 - (LANGUAGE_NAMES.length * lgW + (LANGUAGE_NAMES.length - 1) * lgGap);
+  const btnY = 206, btnW = 156, btnH = 30;
   const swatchHex = ['#FF8000', '#FF0000', '#FFD700', '#00FF00', '#00FFFF', '#FF00FF'];
-  const brLabels = ['Low', 'Med', 'High', 'Max'];
+  // The device only streams the *saved* language, not the live preview the
+  // user may be tapping through — highlight the saved one as best effort.
+  const activeLang = state?.language === 'de' ? 1 : 0;
   return (
     <>
-      <Header title="Settings" />
-      <Label x={20} y={50} w={360} h={24} size={13} color={COL.text} weight={600} align="left">Clock colour:</Label>
+      <Header title={t.settings} t={t} />
+      <Label x={20} y={44} w={360} h={22} size={13} color={COL.text} weight={600} align="left">{t.clockColour}</Label>
       {swatchHex.map((c, i) => (
         <Rect key={i} x={swX0 + i * (swW + swGap)} y={swY} w={swW} h={swH} bg={c} />
       ))}
-      <Label x={20} y={128} w={360} h={24} size={13} color={COL.text} weight={600} align="left">Brightness:</Label>
-      {brLabels.map((l, i) => (
+      <Label x={20} y={112} w={360} h={22} size={13} color={COL.text} weight={600} align="left">{t.brightness}</Label>
+      {t.brightLabels.map((l, i) => (
         <Rect key={i} x={brX0 + i * (brW + brGap)} y={brY} w={brW} h={brH} bg={COL.panel}>
           <Label x={0} y={0} w={brW} h={brH} size={13}>{l}</Label>
         </Rect>
       ))}
+      <Label x={20} y={lgY} w={lgX0 - 24} h={lgH} size={13} color={COL.text} weight={600} align="left">{t.language}</Label>
+      {LANGUAGE_NAMES.map((name, i) => {
+        const on = i === activeLang;
+        return (
+          <Rect key={name} x={lgX0 + i * (lgW + lgGap)} y={lgY} w={lgW} h={lgH} bg={on ? COL.accent : COL.panel}>
+            <Label x={0} y={0} w={lgW} h={lgH} size={13} weight={on ? 700 : 400} color={on ? COL.black : COL.text}>{name}</Label>
+          </Rect>
+        );
+      })}
       <Rect x={28} y={btnY} w={btnW} h={btnH} bg={COL.green}>
-        <Label x={0} y={0} w={btnW} h={btnH} size={13} weight={700} color={COL.black}>Save</Label>
+        <Label x={0} y={0} w={btnW} h={btnH} size={13} weight={700} color={COL.black}>{t.save}</Label>
       </Rect>
       <Rect x={DISP_W - btnW - 28} y={btnY} w={btnW} h={btnH} bg={COL.panel}>
-        <Label x={0} y={0} w={btnW} h={btnH} size={13} color={COL.muted}>Cancel</Label>
+        <Label x={0} y={0} w={btnW} h={btnH} size={13} color={COL.muted}>{t.cancel}</Label>
       </Rect>
     </>
   );
@@ -411,11 +523,12 @@ function ToastScreen({ state }) {
   );
 }
 
-function BootScreen() {
+function BootScreen({ state }) {
+  const t = strings(state);
   return (
     <>
       <Label x={0} y={80} w={DISP_W} h={40} size={22} weight={700} color={COL.accent}>LIXIE STOPWATCH</Label>
-      <Label x={0} y={130} w={DISP_W} h={30} size={14} color={COL.muted}>Booting…</Label>
+      <Label x={0} y={130} w={DISP_W} h={30} size={14} color={COL.muted}>{t.booting}</Label>
     </>
   );
 }
@@ -474,16 +587,16 @@ function SleepScreen({ state }) {
 function ScreenContent({ screen, state }) {
   switch (screen) {
     case 'idle':            return <IdleScreen state={state} />;
-    case 'client':          return <ListScreen title="Select client" state={state} />;
-    case 'project':         return <ListScreen title={crumb(state?.client_name)} state={state} />;
+    case 'client':          return <ListScreen title={strings(state).selectClient} state={state} />;
+    case 'project':         return <ListScreen title={crumb(state?.client_name)} state={state} showBack />;
     case 'category':        return <CategoryScreen state={state} />;
     case 'app':             return <AppScreen state={state} />;
     case 'running':         return <RunningScreen state={state} />;
     case 'confirm':         return <ConfirmScreen state={state} />;
     case 'discard_confirm': return <DiscardConfirmScreen state={state} />;
-    case 'settings':        return <SettingsScreen />;
+    case 'settings':        return <SettingsScreen state={state} />;
     case 'toast':           return <ToastScreen state={state} />;
-    case 'boot':            return <BootScreen />;
+    case 'boot':            return <BootScreen state={state} />;
     case 'sleep':           return <SleepScreen state={state} />;
     default:                return <IdleScreen state={state} />;
   }

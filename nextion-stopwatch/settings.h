@@ -2,11 +2,13 @@
 #define SETTINGS_H
 
 #include <Arduino.h>
+#include "lang.h"
 
 // User-tweakable runtime preferences for the LED matrix and the Nextion
 // touch display. Persisted in NVS (Preferences namespace "leds"), survive
 // power cycles. The on-device Settings screen writes the LED ones; the
-// rest only arrive via the WebSocket from the dashboard.
+// rest only arrive via the WebSocket from the dashboard (language is
+// editable from both).
 namespace Settings {
 
 void begin();                              // load NVS values and apply them
@@ -41,6 +43,11 @@ void     setSleepTimeoutSec(uint16_t s);
 // only entered from the running stopwatch view.
 bool sleepOnIdle();
 void setSleepOnIdle(bool on);
+
+// UI language of the Nextion display. Editable from the on-device Settings
+// screen and from the web dashboard. Applied to Lang:: immediately.
+Language language();
+void     setLanguage(Language l);
 
 }  // namespace Settings
 

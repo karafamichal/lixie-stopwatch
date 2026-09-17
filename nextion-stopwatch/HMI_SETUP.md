@@ -30,7 +30,10 @@ clean monospace or sans-serif font installed on your PC.
 | 3    | DSEG7 / Bahnschrift  | 64 px  | the running stopwatch   |
 
 After each generation, **Add Font** so they receive IDs `0..3` in that
-order. The firmware references them via `config.h`:
+order. Keep the default **ASCII** charset — the firmware transliterates
+everything it draws to 7-bit ASCII (`utf8cp1250.cpp`), and the built-in
+German translation (`lang.cpp`) is written without umlauts ("Zurueck",
+"waehlen") for the same reason. The firmware references them via `config.h`:
 `FONT_SMALL` / `FONT_MEDIUM` / `FONT_LARGE` / `FONT_HUGE`.
 
 ## 3. Page 0 preinitialise event

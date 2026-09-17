@@ -13,6 +13,14 @@ const BRIGHTNESS_LEVELS = [
   { label: 'Max',  value: 250 },
 ];
 
+// UI languages the firmware ships (nextion-stopwatch/lang.cpp). `code` is
+// what goes over the wire; `label` is the native name the device itself
+// shows on its Settings screen.
+const DISPLAY_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'Deutsch' },
+];
+
 // A device is "live" if we've received a WS state push from it in the last
 // 15 s. The ESP32 pushes idle state every 5 s, so 15 s is conservative.
 const LIVE_WINDOW_MS = 15000;
@@ -45,6 +53,7 @@ export default function Devices() {
   const [settingsDispBri,   setSettingsDispBri]   = useState(100);     // 0..100 %
   const [settingsSleepSec,  setSettingsSleepSec]  = useState(30);
   const [settingsSleepIdle, setSettingsSleepIdle] = useState(false);
+  const [settingsLang,      setSettingsLang]      = useState('en');
   const [settingsBusy,      setSettingsBusy]      = useState(false);
   const [settingsFlash,     setSettingsFlash]     = useState('');
 
@@ -159,6 +168,7 @@ export default function Devices() {
       setSettingsDispBri  (s.display_brightness != null ? s.display_brightness : 100);
       setSettingsSleepSec (s.sleep_timeout_sec  != null ? s.sleep_timeout_sec  : 30);
       setSettingsSleepIdle(s.sleep_on_idle === true);
+      setSettingsLang     (s.language || 'en');
     } catch {
       setSettingsColor('#FF8000');
       setSettingsColon('#FF8000');
@@ -167,6 +177,7 @@ export default function Devices() {
       setSettingsDispBri(100);
       setSettingsSleepSec(30);
       setSettingsSleepIdle(false);
+      setSettingsLang('en');
     } finally {
       setSettingsBusy(false);
     }
@@ -183,6 +194,7 @@ export default function Devices() {
         display_brightness: settingsDispBri,
         sleep_timeout_sec:  settingsSleepSec,
         sleep_on_idle:      settingsSleepIdle,
+        language:           settingsLang,
       };
       // When unlinked, send the user's colon choice; when linked, the server
       // mirrors `color` so we don't need to send colon_color at all.
@@ -458,6 +470,32 @@ export default function Devices() {
                 />
               </button>
             </label>
+          </div>
+
+          <div>
+            <p className="label mb-2">Touch display language</p>
+            <div className="grid grid-cols-2 gap-2">
+              {DISPLAY_LANGUAGES.map(l => {
+                const active = settingsLang === l.code;
+                return (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => setSettingsLang(l.code)}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                      active
+                        ? 'bg-amber-500 text-slate-900 border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Applies to the on-device Nextion screen only; the dashboard stays in English.
+            </p>
           </div>
 
           {settingsFlash && (

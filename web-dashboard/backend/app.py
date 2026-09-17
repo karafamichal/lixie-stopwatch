@@ -518,7 +518,12 @@ def create_app():
         'display_brightness',
         'sleep_timeout_sec',
         'sleep_on_idle',
+        'language',
     )
+
+    # UI languages the firmware ships string tables for (see
+    # nextion-stopwatch/lang.cpp). Keep in sync when adding a translation.
+    _DEVICE_LANGUAGES = ('en', 'de')
 
     @app.route('/api/v1/devices/<int:did>/settings', methods=['GET', 'PUT'])
     def device_settings(did):
@@ -534,6 +539,7 @@ def create_app():
           - display_brightness 0..100 (% Nextion backlight; 0 = off)
           - sleep_timeout_sec  0..65535 (seconds, 0 disables auto-sleep)
           - sleep_on_idle      bool — also apply timeout from the idle screen
+          - language           "en" | "de" — Nextion touch-screen UI language
 
         Settings are cached server-side so they survive both dashboard
         refreshes and brief device disconnects — when the device next sends a
@@ -556,6 +562,7 @@ def create_app():
                 'display_brightness': cached.get('display_brightness'),
                 'sleep_timeout_sec':  cached.get('sleep_timeout_sec'),
                 'sleep_on_idle':      cached.get('sleep_on_idle', False),
+                'language':           cached.get('language'),
                 'online':             online,
             })
 
@@ -600,6 +607,11 @@ def create_app():
             update['sleep_timeout_sec'] = s
         if 'sleep_on_idle' in data:
             update['sleep_on_idle'] = bool(data['sleep_on_idle'])
+        if 'language' in data:
+            lang = str(data['language'] or '').strip().lower()
+            if lang not in _DEVICE_LANGUAGES:
+                abort(400, description=f"language must be one of {', '.join(_DEVICE_LANGUAGES)}")
+            update['language'] = lang
         if not update:
             abort(400, description="nothing to update")
 
@@ -837,6 +849,14 @@ def create_app():
                     with _live_lock:
                         _live_states[hw_id] = msg
                         _device_sockets[hw_id] = ws
+                        # The device reports the language it is actually
+                        # showing (the user may have switched it on the touch
+                        # screen). Fold it into the cache before the reconnect
+                        # re-push below reads it, so a stale server value never
+                        # overrides an on-device choice.
+                        lang = msg.get('language')
+                        if lang in _DEVICE_LANGUAGES:
+                            _device_settings.setdefault(hw_id, {})['language'] = lang
                         cached_settings = _device_settings.get(hw_id)
 
                     # Keep the existing "Online" indicator working — same

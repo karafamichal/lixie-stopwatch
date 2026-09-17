@@ -23,11 +23,12 @@
 #include "wifimgr.h"
 #include "wsclient.h"
 #include "settings.h"
+#include "lang.h"
 
 static void enterApSetupMode() {
-    UI::showBootMessage(String("WiFi setup mode\n")
-                        + "Join '" + AP_SSID + "'\n"
-                        + "then open 192.168.4.1");
+    UI::showBootMessage(String(TR(S_AP_SETUP_1)) + "\n"
+                        + TR(S_AP_SETUP_2) + AP_SSID + "'\n"
+                        + TR(S_AP_SETUP_3));
     Serial.println("[boot] AP setup loop");
     // Stay here forever — the only escape is the user saving credentials,
     // which calls ESP.restart() inside the captive portal handler.
@@ -39,7 +40,7 @@ static void enterApSetupMode() {
 
 static void syncNtp() {
     Serial.println("[ntp] sync...");
-    UI::showBootMessage("Syncing time (NTP)...");
+    UI::showBootMessage(TR(S_NTP_SYNCING));
     configTzTime(TZ_STRING, NTP_SERVER_1, NTP_SERVER_2);
     uint32_t t0 = millis();
     time_t now = 0;
@@ -67,14 +68,14 @@ void setup() {
     Serial.println("[boot] nextion ok");
     Serial.flush();
 
-    UI::showBootMessage("Booting...");
+    UI::showBootMessage(TR(S_BOOTING));
 
-    UI::showBootMessage("Connecting to WiFi...");
+    UI::showBootMessage(TR(S_WIFI_CONNECTING));
     if (!WifiMgr::begin()) {
         // Saved + default credentials both failed → captive portal.
         enterApSetupMode();   // never returns
     }
-    UI::showBootMessage("WiFi OK: " + WiFi.localIP().toString());
+    UI::showBootMessage(TR(S_WIFI_OK) + WiFi.localIP().toString());
     syncNtp();
 
     Serial.println("[feed] initial weather + news fetch...");

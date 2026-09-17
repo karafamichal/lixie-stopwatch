@@ -44,6 +44,11 @@ mirror of every device's screen.
   brightness (0–100 %; 0 = display off)**, and an **auto-sleep timeout**
   with an optional "also sleep on idle" toggle. All editable from the
   dashboard and persisted in NVS on the device.
+* **English / German touch-screen UI** — every label on the Nextion
+  display is translated. Switch on the device itself (☰ → Settings →
+  *Language: English / Deutsch*, with live preview before you Save) or
+  from the dashboard's device settings; the choice is persisted in NVS
+  and the dashboard's remote-control mirror follows it automatically.
 * **Auto-sleep view** — after the configured timeout the touch display
   dims to a minimalist icon-only screen (stopwatch glyph while running,
   coffee cup while paused or idle) so the panel isn't distracting in a
@@ -247,7 +252,9 @@ The firmware is a plain Arduino sketch in
    `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
    and install the latest package.
 2. Pick board **ESP32S3 Dev Module**, PSRAM **OPI PSRAM**, Flash size
-   **16 MB**.
+  **16 MB**, and partition scheme **16M Flash (3MB APP/9.9MB FATFS)**.
+  The default scheme has a 1.25 MB app slot and is too small for this
+  firmware.
 3. Install the libraries (Sketch ▸ Include Library ▸ Manage Libraries):
    - `FastLED`
    - `ArduinoJson` (v7)
@@ -286,6 +293,8 @@ Now go to the dashboard at `http://<your-server>:5000/`:
   - **Auto-sleep** — seconds of inactivity before the screen dims to the
     icon-only sleep view (0 disables); a switch lets you extend the
     timeout to the idle screen too
+  - **Touch display language** — English or Deutsch for the Nextion UI
+    (the dashboard itself stays in English)
 * Click the **mirror screen** icon to remote-control the unit from the
   browser. The mirror reproduces every screen — including the sleep
   view — and clicks are converted to device pixels and posted as a

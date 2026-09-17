@@ -36,6 +36,10 @@ void showBootMessage(const String& msg);
 // Switch screen and force a full redraw next tick.
 void goTo(Screen s);
 
+// Force a full repaint of the current screen on the next tick (used after
+// a language change arrives from the dashboard).
+void redraw();
+
 // Returns current screen.
 Screen current();
 

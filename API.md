@@ -310,6 +310,7 @@ Read the currently-cached LED + display settings for one device.
   "display_brightness": 100,
   "sleep_timeout_sec":  30,
   "sleep_on_idle":      false,
+  "language":           "en",
   "online":             true
 }
 ```
@@ -328,11 +329,12 @@ be sent.
 | `display_brightness` | `0..100` | Nextion backlight, in percent. `0` turns the backlight all the way off (controller still responds to commands). |
 | `sleep_timeout_sec` | `0..65535` | Seconds of inactivity before the touch display dims to the icon-only sleep view. `0` disables auto-sleep entirely. |
 | `sleep_on_idle` | boolean | When `true`, the sleep timeout also applies to the idle / home screen (coffee-cup icon). When `false`, sleep only triggers from the running session view. |
+| `language` | `"en"` \| `"de"` | UI language of the Nextion touch screen. Also switchable on the device itself (Settings → Language); the device reports its current language in every state push and the server adopts that value, so the two never fight. |
 
 The dashboard-only `colon_linked` flag is stripped before pushing to the
 device — the firmware only ever sees `{type:"settings", color,
 colon_color, brightness, display_brightness, sleep_timeout_sec,
-sleep_on_idle}`. Settings are cached server-side and re-sent to the
+sleep_on_idle, language}`. Settings are cached server-side and re-sent to the
 device the moment it next connects.
 
 Response includes the merged state plus `delivered: true|false`
@@ -504,6 +506,7 @@ change, then every 1 s while active and every 5 s while idle.
   "screen": "running",
   "paused": false,
   "elapsed_seconds": 1234,
+  "language": "en",
   "client_id": 3, "client_name": "Acme Corp", "client_color": "#FF8000",
   "project_id": 7, "project_name": "Website Redesign", "project_color": "#2D8CFF",
   "app_id": 2, "app_name": "Photoshop",
@@ -538,6 +541,11 @@ screen). `screen: "sleep"` keeps the underlying `state` value
 (`running` / `paused` / `idle`) so dashboards still know what the
 session is doing while the touch panel is dimmed.
 
+`language` (`"en"` / `"de"`) is the UI language the touch screen is
+currently showing. The dashboard's remote-control mirror uses it to
+render its labels in the same language, and `weather.condition` is
+already localized by the firmware.
+
 **Dashboard → server (subscribe)**
 
 ```json
@@ -558,8 +566,8 @@ subscribed dashboards, re-typed as `device_state`:
 
 The first device-state message after a (re)connect also triggers a replay
 of any cached settings (`color`, `colon_color`, `brightness`,
-`display_brightness`, `sleep_timeout_sec`, `sleep_on_idle`) so a
-dashboard-driven setting survives the device dropping offline.
+`display_brightness`, `sleep_timeout_sec`, `sleep_on_idle`, `language`)
+so a dashboard-driven setting survives the device dropping offline.
 
 **Server → device (control)**
 
@@ -571,7 +579,8 @@ dashboard-driven setting survives the device dropping offline.
   "brightness":         150,
   "display_brightness": 100,
   "sleep_timeout_sec":  30,
-  "sleep_on_idle":      false
+  "sleep_on_idle":      false,
+  "language":           "de"
 }
 { "type": "remote_touch", "x": 200, "y": 120, "pressed": true }
 ```

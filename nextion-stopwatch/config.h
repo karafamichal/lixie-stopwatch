@@ -53,7 +53,7 @@
 #define WS_PATH       "/api/v1/ws"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
-#define HARDWARE_ID   "esp32_lixie_001"
+#define HARDWARE_ID   "esp32_lixie_002"
 
 // ============================================================================
 // Idle-screen content sources (weather + news headlines)

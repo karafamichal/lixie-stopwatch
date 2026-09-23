@@ -86,12 +86,10 @@ install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 \
 echo "==> [5/6] Building the React dashboard"
 pushd "$INSTALL_DIR/dashboard" >/dev/null
 npm ci
+# vite.config.js has outDir '../backend/static', so the build lands straight
+# in the folder Flask serves — no copy step needed.
 npm run build
 popd >/dev/null
-
-install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0755 \
-    "$INSTALL_DIR/backend/static"
-rsync -a --delete "$INSTALL_DIR/dashboard/dist/" "$INSTALL_DIR/backend/static/"
 
 # Make sure everything is owned by the service user.
 chown -R "$SERVICE_USER":"$SERVICE_GROUP" "$INSTALL_DIR" "$LOG_DIR"

@@ -92,6 +92,26 @@ void setup() {
     UI::goTo(UI::SCR_IDLE);
 }
 
+// Night dimming, offline-queue retries and pending firmware updates.
+static void backgroundJobs() {
+    static uint32_t lastNight = 0;
+    static uint32_t lastQueue = 0;
+    uint32_t now = millis();
+
+    // Skip on the settings screen so its live brightness preview sticks.
+    if (now - lastNight >= 1000 && UI::current() != UI::SCR_SETTINGS) {
+        lastNight = now;
+        Settings::applyNightMode(UI::sessionActive());
+    }
+    // Retry sessions saved while offline — only while idle, because each
+    // attempt is a blocking HTTP call.
+    if (now - lastQueue >= 60000UL && UI::current() == UI::SCR_IDLE) {
+        lastQueue = now;
+        Api::flushQueue();
+    }
+    WsClient::runPendingOta();
+}
+
 static void refreshFeeds() {
     static uint32_t lastWeather = 0;
     static uint32_t lastNews    = 0;
@@ -119,6 +139,7 @@ void loop() {
     UI::tick();
     LedDisplay::tick();
     refreshFeeds();
+    backgroundJobs();
     // WebSocket replaces the old HTTP heartbeat — every state push refreshes
     // last_seen on the server, so the dashboard's Online indicator stays
     // accurate without a second channel.

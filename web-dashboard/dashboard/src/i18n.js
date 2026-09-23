@@ -306,7 +306,138 @@ const DE = {
   'Show live sessions on the homepage': 'Live-Sitzungen auf der Startseite anzeigen',
 };
 
-const TABLES = { de: DE };
+// Strings added with login, themes, budgets, exports, backup and firmware.
+const DE_MORE = {
+  // login
+  'Enter the dashboard password to continue.': 'Gib das Dashboard-Passwort ein, um fortzufahren.',
+  'Password': 'Passwort',
+  'Log in': 'Anmelden',
+  'Log out': 'Abmelden',
+  'Wrong password. Try again.': 'Falsches Passwort. Versuch es noch einmal.',
+
+  // overview
+  'Tracked this week': 'Diese Woche erfasst',
+  '{d} this month': '{d} in diesem Monat',
+  'Budgets running out': 'Budgets fast aufgebraucht',
+  'Last 7 days': 'Letzte 7 Tage',
+  'All projects': 'Alle Projekte',
+  'Sections': 'Bereiche',
+  'View all': 'Alle anzeigen',
+
+  // live sessions
+  'Focus: {t} left': 'Fokus: noch {t}',
+  'Break: {t} left': 'Pause: noch {t}',
+  'Break over, waiting to continue': 'Pause vorbei, wartet auf Weiter',
+
+  // projects / budgets / statement
+  'Budget': 'Budget',
+  'Budget (hours)': 'Budget (Stunden)',
+  'Budget used': 'Verbrauchtes Budget',
+  '{used} of {budget} h ({pct} %)': '{used} von {budget} h ({pct} %)',
+  'The homepage warns when a project has used 80 % of its budget.':
+    'Die Startseite warnt, sobald ein Projekt 80 % seines Budgets verbraucht hat.',
+  'Billing statement': 'Abrechnungsübersicht',
+  'Print or save as PDF': 'Drucken oder als PDF speichern',
+  'Issued {d}': 'Erstellt am {d}',
+  'Work period {a} – {b}': 'Leistungszeitraum {a} – {b}',
+  'Amount': 'Betrag',
+  'Total': 'Summe',
+  'Hours are tracked with the Lixie StopWatch and rounded to two decimals. Rows without an hourly rate are not charged.':
+    'Die Stunden wurden mit der Lixie StopWatch erfasst und auf zwei Nachkommastellen gerundet. Positionen ohne Stundensatz werden nicht berechnet.',
+
+  // reports / time logs
+  'Earnings by project': 'Verdienst nach Projekt',
+  'Export CSV': 'CSV exportieren',
+  'Date': 'Datum',
+
+  // devices
+  'Device settings': 'Geräteeinstellungen',
+  'Firmware': 'Firmware',
+  '{n} waiting to sync': '{n} warten auf Sync',
+  'Sessions saved on the device while the server was unreachable':
+    'Sitzungen, die das Gerät gespeichert hat, während der Server nicht erreichbar war',
+  'update waiting': 'Update wartet',
+  'update failed': 'Update fehlgeschlagen',
+  'Install uploaded firmware': 'Hochgeladene Firmware installieren',
+  'Upload firmware under Settings first': 'Lade zuerst unter Einstellungen eine Firmware hoch',
+  'Install firmware': 'Firmware installieren',
+  'Install': 'Installieren',
+  'Install "{file}" on {name}? The device waits until no session is running, then restarts with the new firmware.':
+    '„{file}“ auf {name} installieren? Das Gerät wartet, bis keine Sitzung läuft, und startet dann mit der neuen Firmware neu.',
+  'Update sent to {name}. It installs as soon as no session is running, then the device restarts.':
+    'Update an {name} gesendet. Es wird installiert, sobald keine Sitzung läuft; danach startet das Gerät neu.',
+  '{name} is offline. Try again when it is connected.': '{name} ist offline. Versuch es erneut, wenn das Gerät verbunden ist.',
+  'Pomodoro timer': 'Pomodoro-Timer',
+  'Focus minutes': 'Fokusminuten',
+  'Break minutes': 'Pausenminuten',
+  'min focus, then': 'Min. Fokus, dann',
+  'min break': 'Min. Pause',
+  'The LEDs count down each focus block. The session pauses for the break, and the digits blink when the break is over.':
+    'Die LEDs zählen jeden Fokusblock herunter. Für die Pause wird die Sitzung angehalten, und die Ziffern blinken, wenn die Pause vorbei ist.',
+  'Remind me to start the timer': 'An den Timer-Start erinnern',
+  'after': 'nach',
+  'Reminder minutes': 'Minuten bis zur Erinnerung',
+  'minutes on the home screen without a touch': 'Minuten ohne Berührung auf dem Startbildschirm',
+  'Dim the LEDs at night': 'LEDs nachts dimmen',
+  'From': 'Von',
+  'to': 'bis',
+  'Night starts': 'Nacht beginnt',
+  'Night ends': 'Nacht endet',
+  'LEDs off': 'LEDs aus',
+  'Very dim': 'Sehr dunkel',
+  'Dim': 'Gedimmt',
+  'Full brightness returns while a session is running.': 'Während einer laufenden Sitzung leuchten die LEDs wieder normal.',
+
+  // settings
+  'Appearance': 'Darstellung',
+  'Stored in this browser only.': 'Nur in diesem Browser gespeichert.',
+  'Theme': 'Design',
+  'Match system': 'Wie System',
+  'Dark': 'Dunkel',
+  'Light': 'Hell',
+  'Billing': 'Abrechnung',
+  'Shared by everyone using this server.': 'Gilt für alle, die diesen Server nutzen.',
+  'Currency': 'Währung',
+  'Used for hourly rates, earnings and invoices. Amounts are not converted.':
+    'Für Stundensätze, Verdienst und Abrechnungen. Beträge werden nicht umgerechnet.',
+  'Dashboard password': 'Dashboard-Passwort',
+  'The dashboard asks for this password. Devices keep working without it.':
+    'Das Dashboard fragt nach diesem Passwort. Geräte funktionieren weiterhin ohne.',
+  'Anyone on the network can open the dashboard. Set a password to lock it; devices keep working without it.':
+    'Jeder im Netzwerk kann das Dashboard öffnen. Mit einem Passwort sperrst du es; Geräte funktionieren weiterhin ohne.',
+  'Current password': 'Aktuelles Passwort',
+  'New password': 'Neues Passwort',
+  'Repeat new password': 'Neues Passwort wiederholen',
+  'Set password': 'Passwort festlegen',
+  'Change password': 'Passwort ändern',
+  'Remove password': 'Passwort entfernen',
+  'The new passwords do not match.': 'Die neuen Passwörter stimmen nicht überein.',
+  'Password saved.': 'Passwort gespeichert.',
+  'Password removed. The dashboard is open to everyone on the network.':
+    'Passwort entfernt. Das Dashboard ist für alle im Netzwerk offen.',
+  'Backup': 'Sicherung',
+  'One file with all clients, projects, time logs and settings.':
+    'Eine Datei mit allen Kunden, Projekten, Zeiteinträgen und Einstellungen.',
+  'Download backup': 'Sicherung herunterladen',
+  'Restore from file…': 'Aus Datei wiederherstellen…',
+  'Restore backup': 'Sicherung wiederherstellen',
+  'Restore': 'Wiederherstellen',
+  'Replace all clients, projects, time logs and settings with the contents of "{name}"? Download a backup of the current data first if you might need it.':
+    'Alle Kunden, Projekte, Zeiteinträge und Einstellungen durch den Inhalt von „{name}“ ersetzen? Lade vorher eine Sicherung der aktuellen Daten herunter, falls du sie noch brauchst.',
+  'Backup restored. Reloading…': 'Sicherung wiederhergestellt. Wird neu geladen…',
+  'Device firmware': 'Geräte-Firmware',
+  'Upload a compiled .bin, then install it on a device from the Devices page. Devices update once no session is running.':
+    'Lade eine kompilierte .bin hoch und installiere sie dann auf der Seite Geräte. Geräte aktualisieren sich, sobald keine Sitzung läuft.',
+  'No firmware uploaded yet.': 'Noch keine Firmware hochgeladen.',
+  'Upload firmware (.bin)…': 'Firmware (.bin) hochladen…',
+  'Uploading…': 'Wird hochgeladen…',
+  'Firmware uploaded. Install it from the Devices page.': 'Firmware hochgeladen. Installiere sie auf der Seite Geräte.',
+  'File': 'Datei',
+  'Size': 'Größe',
+  'Uploaded': 'Hochgeladen',
+};
+
+const TABLES = { de: { ...DE, ...DE_MORE } };
 
 function read(key, fallback) {
   try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
@@ -319,14 +450,41 @@ let prefs = {
   lang: read('dash.lang', (navigator.language || '').toLowerCase().startsWith('de') ? 'de' : 'en'),
   startPage: read('dash.startPage', '/overview'),
   showLive: read('dash.showLive', '1') === '1',
+  theme: read('dash.theme', 'system'),            // 'system' | 'dark' | 'light'
+  currency: read('dash.currency', 'EUR'),         // cached copy of the server setting
 };
 const listeners = new Set();
-document.documentElement.lang = prefs.lang;
+
+// ── theme ─────────────────────────────────────────────────────────────────
+const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+function resolvedTheme() {
+  if (prefs.theme === 'light' || prefs.theme === 'dark') return prefs.theme;
+  return darkQuery && !darkQuery.matches ? 'light' : 'dark';
+}
+
+function applyDocument() {
+  const theme = resolvedTheme();
+  document.documentElement.classList.toggle('light', theme === 'light');
+  document.documentElement.lang = prefs.lang;
+  prefs = { ...prefs, resolvedTheme: theme };
+}
+applyDocument();
+
+// Paper is white: print with the light palette, then restore.
+window.addEventListener('beforeprint', () => document.documentElement.classList.add('light'));
+window.addEventListener('afterprint', applyDocument);
+
+darkQuery?.addEventListener?.('change', () => {
+  if (prefs.theme !== 'system') return;
+  applyDocument();
+  listeners.forEach(l => l());
+});
 
 export function setPref(key, value) {
   prefs = { ...prefs, [key]: value };
   write(`dash.${key}`, typeof value === 'boolean' ? (value ? '1' : '0') : value);
-  if (key === 'lang') document.documentElement.lang = value;
+  applyDocument();
   listeners.forEach(l => l());
 }
 
@@ -341,4 +499,25 @@ export function t(s, vars) {
   let out = TABLES[prefs.lang]?.[s] ?? s;
   if (vars) for (const k in vars) out = out.replaceAll(`{${k}}`, vars[k]);
   return out;
+}
+
+// Locale for dates and numbers follows the dashboard language.
+export function locale() {
+  return prefs.lang === 'de' ? 'de-DE' : 'en-GB';
+}
+
+export function fmtMoney(value) {
+  try {
+    return new Intl.NumberFormat(locale(), { style: 'currency', currency: prefs.currency })
+      .format(value || 0);
+  } catch {
+    return `${(value || 0).toFixed(2)} ${prefs.currency}`;
+  }
+}
+
+// Resolved theme colour for places that can't use CSS classes (chart SVG
+// attributes). Charts remount on theme change, so reading once is enough.
+export function cssColor(name, alpha = 1) {
+  const rgb = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();
+  return rgb ? `rgb(${rgb.split(' ').join(', ')}, ${alpha})` : '#888';
 }

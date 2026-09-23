@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Pencil, Trash2, Wifi, WifiOff, Palette, MonitorSmartphone } from 'lucide-react';
+import { Pencil, Trash2, Wifi, WifiOff, Palette, MonitorSmartphone, Download } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import RemoteDisplay from '../components/RemoteDisplay';
-import { t } from '../i18n';
+import { t, locale } from '../i18n';
 
 const BRIGHTNESS_LEVELS = [
   { label: 'Low',  value: 30  },
@@ -29,6 +29,65 @@ const LIVE_WINDOW_MS = 15000;
 // REST fallback: a `last_seen` newer than this counts as online even without
 // a WS message yet (covers page load before the first WS state arrives).
 const RECENT_LAST_SEEN_MS = 60000;
+
+// Pomodoro / reminder / night-mode settings (firmware 1.1+). Night mode is
+// off while night_start == night_end.
+const DEFAULT_EXTRA = {
+  pomodoro_min: 0, break_min: 5, reminder_min: 0,
+  night_start: 0, night_end: 0, night_brightness: 10,
+};
+const EXTRA_RANGES = {
+  pomodoro_min: [0, 120], break_min: [1, 60], reminder_min: [0, 480],
+  night_start: [0, 23], night_end: [0, 23], night_brightness: [0, 255],
+};
+const NIGHT_LEVELS = [
+  { label: 'LEDs off', value: 0 },
+  { label: 'Very dim', value: 10 },
+  { label: 'Dim',      value: 40 },
+];
+
+function clampInt(v, [lo, hi], fallback) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+}
+
+function Toggle({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
+      <span className="text-sm text-slate-300">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+          checked ? 'bg-amber-500' : 'bg-slate-600'
+        }`}
+      >
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`} />
+      </button>
+    </label>
+  );
+}
+
+function NumberField({ value, onChange, min, max, label }) {
+  return (
+    <input type="number" className="input w-20" min={min} max={max} aria-label={label}
+      value={value} onChange={e => onChange(e.target.value)} />
+  );
+}
+
+function HourSelect({ value, onChange, label }) {
+  return (
+    <select className="input w-24" value={value} aria-label={label} onChange={e => onChange(parseInt(e.target.value, 10))}>
+      {Array.from({ length: 24 }, (_, h) => (
+        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+      ))}
+    </select>
+  );
+}
 
 function findBrightnessIdx(v) {
   if (v == null) return 3;
@@ -57,6 +116,13 @@ export default function Devices() {
   const [settingsLang,      setSettingsLang]      = useState('en');
   const [settingsBusy,      setSettingsBusy]      = useState(false);
   const [settingsFlash,     setSettingsFlash]     = useState('');
+  const [extra,             setExtra]             = useState(DEFAULT_EXTRA);
+  const setX = (key, value) => setExtra(e => ({ ...e, [key]: value }));
+
+  // Firmware update
+  const [fwInfo,    setFwInfo]    = useState(null);
+  const [otaTarget, setOtaTarget] = useState(null);
+  const [otaFlash,  setOtaFlash]  = useState('');
 
   // Live presence + full last state — hardware_id -> { ...device_state, _ts }.
   const [liveStates, setLiveStates] = useState({});
@@ -74,6 +140,7 @@ export default function Devices() {
   }, []);
 
   useEffect(load, [load]);
+  useEffect(() => { api.firmware.info().then(setFwInfo).catch(() => {}); }, []);
 
   // Tick a local clock so the icon flips back to offline even when the WS
   // goes silent (e.g. device powered off — no message to react to).
@@ -170,7 +237,9 @@ export default function Devices() {
       setSettingsSleepSec (s.sleep_timeout_sec  != null ? s.sleep_timeout_sec  : 30);
       setSettingsSleepIdle(s.sleep_on_idle === true);
       setSettingsLang     (s.language || 'en');
+      setExtra(Object.fromEntries(Object.entries(DEFAULT_EXTRA).map(([k, d]) => [k, s[k] ?? d])));
     } catch {
+      setExtra(DEFAULT_EXTRA);
       setSettingsColor('#FF8000');
       setSettingsColon('#FF8000');
       setSettingsLinked(true);
@@ -196,6 +265,8 @@ export default function Devices() {
         sleep_timeout_sec:  settingsSleepSec,
         sleep_on_idle:      settingsSleepIdle,
         language:           settingsLang,
+        ...Object.fromEntries(Object.entries(extra).map(
+          ([k, v]) => [k, clampInt(v, EXTRA_RANGES[k], DEFAULT_EXTRA[k])])),
       };
       // When unlinked, send the user's colon choice; when linked, the server
       // mirrors `color` so we don't need to send colon_color at all.
@@ -212,8 +283,45 @@ export default function Devices() {
     }
   };
 
+  const installFirmware = async () => {
+    const d = otaTarget;
+    setOtaTarget(null);
+    try {
+      const res = await api.firmware.install(d.id);
+      setOtaFlash(res.delivered
+        ? t('Update sent to {name}. It installs as soon as no session is running, then the device restarts.', { name: d.label || d.hardware_id })
+        : t('{name} is offline. Try again when it is connected.', { name: d.label || d.hardware_id }));
+    } catch (e) {
+      setOtaFlash(e.response?.data?.error || t('Something went wrong'));
+    }
+  };
+
+  const firmwareCell = (d) => {
+    const live = liveStates[d.hardware_id];
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <span className="text-slate-300">{live?.fw || '–'}</span>
+        {live?.queued > 0 && (
+          <span className="badge-pending" title={t('Sessions saved on the device while the server was unreachable')}>
+            {t('{n} waiting to sync', { n: live.queued })}
+          </span>
+        )}
+        {live?.ota_status === 'waiting' && <span className="text-xs text-slate-500">{t('update waiting')}</span>}
+        {live?.ota_status === 'failed' && <span className="text-xs text-red-400">{t('update failed')}</span>}
+      </div>
+    );
+  };
+
   const deviceActions = (d) => (
     <div className="flex justify-end gap-1">
+      <button
+        className="icon-btn"
+        title={fwInfo ? t('Install uploaded firmware') : t('Upload firmware under Settings first')}
+        onClick={() => setOtaTarget(d)}
+        disabled={!fwInfo || !isOnline(d)}
+      >
+        <Download className="w-4 h-4" />
+      </button>
       <button
         className="icon-btn"
         title={t('Remote control (mirror the display)')}
@@ -222,7 +330,7 @@ export default function Devices() {
       >
         <MonitorSmartphone className={`w-4 h-4 ${isOnline(d) ? '' : 'opacity-30'}`} />
       </button>
-      <button className="icon-btn" title={t('Matrix colour & brightness')} onClick={() => openSettings(d)}>
+      <button className="icon-btn" title={t('Device settings')} onClick={() => openSettings(d)}>
         <Palette className="w-4 h-4" />
       </button>
       <button className="icon-btn" title={t('Edit label')} onClick={() => openEdit(d)}>
@@ -243,6 +351,10 @@ export default function Devices() {
         </div>
       </div>
 
+      {otaFlash && (
+        <p className="card px-4 py-3 mb-4 text-sm text-slate-300" role="status">{otaFlash}</p>
+      )}
+
       {/* Desktop: table */}
       <div className="hidden md:block card overflow-hidden">
         <table className="w-full">
@@ -251,16 +363,17 @@ export default function Devices() {
               <th className="th">{t('Status')}</th>
               <th className="th">{t('Hardware ID')}</th>
               <th className="th">{t('Label')}</th>
+              <th className="th">{t('Firmware')}</th>
               <th className="th">{t('Last Seen')}</th>
               <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
+              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : devices.length === 0 ? (
               <tr>
-                <td colSpan={5} className="td text-center text-slate-500 py-10">
+                <td colSpan={6} className="td text-center text-slate-500 py-10">
                   {t('No devices yet. Devices appear here after the ESP32 sends its first time log.')}
                 </td>
               </tr>
@@ -275,8 +388,9 @@ export default function Devices() {
                   </td>
                   <td className="td font-mono text-sm text-amber-400">{d.hardware_id}</td>
                   <td className="td text-sm text-slate-300">{d.label || <span className="text-slate-600 italic">{t('no label')}</span>}</td>
+                  <td className="td">{firmwareCell(d)}</td>
                   <td className="td text-sm text-slate-500">
-                    {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
+                    {d.last_seen ? new Date(d.last_seen).toLocaleString(locale()) : '–'}
                   </td>
                   <td className="td">{deviceActions(d)}</td>
                 </tr>
@@ -307,8 +421,9 @@ export default function Devices() {
                   </p>
                 </div>
               </div>
+              <div className="mb-2">{firmwareCell(d)}</div>
               <p className="text-xs text-slate-500 mb-2">
-                {t('Last seen: {t}', { t: d.last_seen ? new Date(d.last_seen).toLocaleString() : '–' })}
+                {t('Last seen: {t}', { t: d.last_seen ? new Date(d.last_seen).toLocaleString(locale()) : '–' })}
               </p>
               <div className="border-t border-slate-700/60 pt-2 -mb-1">
                 {deviceActions(d)}
@@ -346,7 +461,7 @@ export default function Devices() {
         message={t('Remove device "{id}"? Time logs from this device are kept.', { id: deleteTarget?.hardware_id })}
       />
 
-      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title={t('Matrix Settings')} size="sm">
+      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title={t('Device settings')} size="sm">
         <div className="space-y-4">
           <p className="text-xs text-slate-500 font-mono">
             {settingsTarget?.hardware_id}
@@ -398,7 +513,7 @@ export default function Devices() {
                     onClick={() => setSettingsBright(b.value)}
                     className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                       active
-                        ? 'bg-amber-500 text-slate-900 border-amber-400'
+                        ? 'bg-amber-500 text-onaccent border-amber-400'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
                     }`}
                   >
@@ -473,7 +588,73 @@ export default function Devices() {
             </label>
           </div>
 
-          <div>
+          <div className="space-y-2 border-t border-slate-700 pt-4">
+            <Toggle
+              label={t('Pomodoro timer')}
+              checked={extra.pomodoro_min > 0}
+              onChange={on => setX('pomodoro_min', on ? 25 : 0)}
+            />
+            {extra.pomodoro_min > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                <NumberField value={extra.pomodoro_min} min={1} max={120} label={t('Focus minutes')}
+                  onChange={v => setX('pomodoro_min', v)} />
+                <span>{t('min focus, then')}</span>
+                <NumberField value={extra.break_min} min={1} max={60} label={t('Break minutes')}
+                  onChange={v => setX('break_min', v)} />
+                <span>{t('min break')}</span>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500">
+              {t('The LEDs count down each focus block. The session pauses for the break, and the digits blink when the break is over.')}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Toggle
+              label={t('Remind me to start the timer')}
+              checked={extra.reminder_min > 0}
+              onChange={on => setX('reminder_min', on ? 30 : 0)}
+            />
+            {extra.reminder_min > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                <span>{t('after')}</span>
+                <NumberField value={extra.reminder_min} min={1} max={480} label={t('Reminder minutes')}
+                  onChange={v => setX('reminder_min', v)} />
+                <span>{t('minutes on the home screen without a touch')}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Toggle
+              label={t('Dim the LEDs at night')}
+              checked={extra.night_start !== extra.night_end}
+              onChange={on => setExtra(e => ({ ...e, night_start: on ? 22 : 0, night_end: on ? 7 : 0 }))}
+            />
+            {extra.night_start !== extra.night_end && (
+              <>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                  <span>{t('From')}</span>
+                  <HourSelect value={extra.night_start} label={t('Night starts')} onChange={v => setX('night_start', v)} />
+                  <span>{t('to')}</span>
+                  <HourSelect value={extra.night_end} label={t('Night ends')} onChange={v => setX('night_end', v)} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {NIGHT_LEVELS.map(l => (
+                    <button key={l.value} type="button" onClick={() => setX('night_brightness', l.value)}
+                      className={`seg ${Number(extra.night_brightness) === l.value ? 'seg-on' : ''}`}>
+                      {t(l.label)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <p className="text-[11px] text-slate-500">
+              {t('Full brightness returns while a session is running.')}
+            </p>
+          </div>
+
+          <div className="border-t border-slate-700 pt-4">
             <p className="label mb-2">{t('Touch display language')}</p>
             <div className="grid grid-cols-2 gap-2">
               {DISPLAY_LANGUAGES.map(l => {
@@ -485,7 +666,7 @@ export default function Devices() {
                     onClick={() => setSettingsLang(l.code)}
                     className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                       active
-                        ? 'bg-amber-500 text-slate-900 border-amber-400'
+                        ? 'bg-amber-500 text-onaccent border-amber-400'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
                     }`}
                   >
@@ -516,6 +697,18 @@ export default function Devices() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!otaTarget}
+        onClose={() => setOtaTarget(null)}
+        onConfirm={installFirmware}
+        title={t('Install firmware')}
+        confirmLabel={t('Install')}
+        message={t('Install "{file}" on {name}? The device waits until no session is running, then restarts with the new firmware.', {
+          file: fwInfo?.name || 'firmware.bin',
+          name: otaTarget?.label || otaTarget?.hardware_id,
+        })}
+      />
 
       {/* Remote Control — virtual screen mirror + touch injection */}
       <Modal

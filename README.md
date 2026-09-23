@@ -57,6 +57,23 @@ mirror of every device's screen.
   IP, no API keys required. Headline rotates every 8 s and the
   background fetch only runs while the device is idle so timing during a
   session is never disturbed.
+* **Offline-safe saving** — if the server can't be reached when you save
+  a session, the device keeps it (up to 16) and re-sends it once a minute
+  while idle. The dashboard shows how many are waiting per device.
+* **Pomodoro mode** — optional focus blocks (e.g. 25 min): the LED digits
+  count down, the session pauses for the break (green countdown), and the
+  digits blink when it's time to continue.
+* **"Forgot to start?" reminder** — after a configurable idle stretch on
+  the home screen the device asks, and the LEDs blink until someone taps.
+* **Night mode** — the LED matrix dims (or switches off) during set hours,
+  but lights up normally while a session is running.
+* **Firmware updates over Wi-Fi** — upload a `.bin` in the dashboard
+  (Settings → Device firmware) and install it per device; the device waits
+  until no session is running, verifies the image and restarts.
+* **Dashboard extras** — English / German UI, light / dark theme, login
+  password, hour budgets per project with warnings, CSV export of time
+  logs, printable billing statements and reports (save as PDF), currency
+  setting, and one-click database backup / restore.
 
 ---
 
@@ -260,6 +277,12 @@ The firmware is a plain Arduino sketch in
    - `ArduinoJson` (v7)
    - `WebSockets` by Markus Sattler
 4. Open `nextion-stopwatch/nextion-stopwatch.ino` and flash.
+
+Later updates can go over Wi-Fi: bump `FW_VERSION` in `config.h`, use
+**Sketch ▸ Export Compiled Binary**, upload the `.ino.bin` under
+Settings → Device firmware in the dashboard, then press the install button
+next to the device on the Devices page. This needs a partition scheme with
+two app slots — the one above has them.
 
 On a brand-new device the firmware tries the placeholder Wi-Fi in
 `config.h` (`changeme` / `changeme`), fails, and brings up the captive

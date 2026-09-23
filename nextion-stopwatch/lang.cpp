@@ -85,6 +85,17 @@ static const char* const TABLE[S__COUNT][LANG_COUNT] = {
     /* S_WX_SNOW_SHOWERS    */ {"Snow showers",                    "Schneeschauer"},
     /* S_WX_THUNDERSTORM    */ {"Thunderstorm",                    "Gewitter"},
     /* S_WX_UNKNOWN         */ {"Unknown",                         "Unbekannt"},
+
+    // Offline queue, idle reminder, pomodoro, firmware update
+    /* S_TOAST_SAVED_OFFLINE*/ {"Saved offline",                   "Lokal gesichert"},
+    /* S_REMINDER_TITLE     */ {"Forgot to start?",                "Timer vergessen?"},
+    /* S_REMINDER_BODY      */ {"No timer has run for a while.",   "Seit einer Weile laeuft kein Timer."},
+    /* S_DISMISS            */ {"Dismiss",                         "Schliessen"},
+    /* S_FOCUS_PREFIX       */ {"Focus: ",                         "Fokus: "},
+    /* S_BREAK_PREFIX       */ {"Break: ",                         "Pause: "},
+    /* S_BREAK_OVER         */ {"Break over - tap CONTINUE",       "Pause vorbei - WEITER tippen"},
+    /* S_UPDATING           */ {"Updating firmware...",            "Firmware wird aktualisiert..."},
+    /* S_UPDATE_FAILED      */ {"Update failed",                   "Update-Fehler"},
 };
 
 static const char* const NAMES[LANG_COUNT] = {"English", "Deutsch"};

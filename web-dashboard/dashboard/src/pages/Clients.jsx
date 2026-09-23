@@ -6,7 +6,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
-import { t } from '../i18n';
+import { t, fmtMoney, locale } from '../i18n';
 
 const empty = { name: '', active: true, color: '#FF8000', logo: null };
 
@@ -108,7 +108,7 @@ export default function Clients() {
                 <p className="text-sm font-medium text-slate-200 truncate">{p.name}</p>
                 <p className="text-xs text-slate-500">
                   {b ? fmtDuration(b.seconds) : '–'}
-                  {b?.earnings > 0 && <span className="text-amber-400 ml-2">€{b.earnings.toFixed(2)}</span>}
+                  {b?.earnings > 0 && <span className="text-amber-400 ml-2">{fmtMoney(b.earnings)}</span>}
                 </p>
               </div>
               {p.completed ? (
@@ -183,7 +183,7 @@ export default function Clients() {
                       {c.active ? t('Active') : t('Inactive')}
                     </span>
                   </td>
-                  <td className="td text-sm text-slate-500">{new Date(c.created_at).toLocaleDateString()}</td>
+                  <td className="td text-sm text-slate-500">{new Date(c.created_at).toLocaleDateString(locale())}</td>
                   <td className="td">
                     <div className="flex justify-end gap-1">
                       <button className="icon-btn" title={c.active ? t('Deactivate') : t('Activate')} onClick={() => toggleActive(c)}>
@@ -224,7 +224,7 @@ export default function Clients() {
                   <span className={c.active ? 'badge-active' : 'badge-inactive'}>
                     {c.active ? t('Active') : t('Inactive')}
                   </span>
-                  <span className="ml-2">{new Date(c.created_at).toLocaleDateString()}</span>
+                  <span className="ml-2">{new Date(c.created_at).toLocaleDateString(locale())}</span>
                 </p>
               </div>
               {expandedId === c.id

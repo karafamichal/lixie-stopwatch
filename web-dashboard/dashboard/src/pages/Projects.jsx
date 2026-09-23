@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, CheckCircle, Receipt } from 'lucide-react';
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, CheckCircle, Receipt, Printer } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
-import { t } from '../i18n';
+import { t, fmtMoney, locale } from '../i18n';
+import BudgetMeter from '../components/BudgetMeter';
 
-const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null };
+const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null, budget_hours: '' };
 
 function fmtDuration(s) {
   const h = Math.floor(s / 3600);
@@ -60,7 +61,7 @@ export default function Projects() {
     setEditTarget(null); setError(''); setModalOpen(true);
   };
   const openEdit = (p) => {
-    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null });
+    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null, budget_hours: p.budget_hours ?? '' });
     setEditTarget(p); setError(''); setModalOpen(true);
   };
 
@@ -157,15 +158,16 @@ export default function Projects() {
               <th className="th">{t('Project')}</th>
               <th className="th">{t('Client')}</th>
               <th className="th">{t('Status')}</th>
+              <th className="th">{t('Budget')}</th>
               <th className="th">{t('Created')}</th>
               <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
+              <tr><td colSpan={8} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : projects.length === 0 ? (
-              <tr><td colSpan={7} className="td text-center text-slate-500 py-10">{t('No projects found.')}</td></tr>
+              <tr><td colSpan={8} className="td text-center text-slate-500 py-10">{t('No projects found.')}</td></tr>
             ) : projects.map(p => (
               <tr key={p.id} className={`tr ${p.completed ? 'opacity-60' : ''}`}>
                 <td className="p-0" style={{ width: 5, backgroundColor: p.color || '#FF8000' }} />
@@ -195,10 +197,13 @@ export default function Projects() {
                     </span>
                   )}
                 </td>
+                <td className="td w-52">
+                  {p.budget_hours ? <BudgetMeter project={p} /> : <span className="text-xs text-slate-600">–</span>}
+                </td>
                 <td className="td text-sm text-slate-500">
                   {p.completed && p.completed_at
-                    ? new Date(p.completed_at).toLocaleDateString()
-                    : new Date(p.created_at).toLocaleDateString()}
+                    ? new Date(p.completed_at).toLocaleDateString(locale())
+                    : new Date(p.created_at).toLocaleDateString(locale())}
                 </td>
                 <td className="td">{renderActions(p)}</td>
               </tr>
@@ -242,6 +247,9 @@ export default function Projects() {
                 )}
               </div>
             </div>
+            {p.budget_hours ? (
+              <div className="px-3 sm:px-4 pb-3"><BudgetMeter project={p} /></div>
+            ) : null}
             <div className="px-2 sm:px-3 pb-2 border-t border-slate-700/60 pt-2">
               {renderActions(p)}
             </div>
@@ -264,6 +272,12 @@ export default function Projects() {
             <label className="label">{t('Project Name')}</label>
             <input className="input" type="text" required placeholder={t('e.g. Website Redesign')}
               value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="label" htmlFor="budget">{t('Budget (hours)')} <span className="text-slate-500 font-normal">{t('(optional)')}</span></label>
+            <input id="budget" className="input w-36" type="number" min="0" step="0.5" placeholder="40"
+              value={form.budget_hours} onChange={e => setForm(p => ({ ...p, budget_hours: e.target.value }))} />
+            <p className="hint">{t('The homepage warns when a project has used 80 % of its budget.')}</p>
           </div>
           <div>
             <label className="label">{t('Colour')}</label>
@@ -303,10 +317,10 @@ export default function Projects() {
                 <table className="w-full text-sm min-w-[420px]">
                   <thead>
                     <tr className="border-b border-slate-700">
-                      <th className="text-left py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">{t('App')}</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">{t('Hours')}</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">{t('Rate')}</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">{t('Earned')}</th>
+                      <th className="text-left py-2 text-xs text-slate-400 font-medium">{t('App')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Hours')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Rate')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Earned')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -318,14 +332,14 @@ export default function Projects() {
                             <span className="text-slate-200 truncate">{row.app_name}</span>
                           </div>
                         </td>
-                        <td className="py-2.5 text-right font-mono text-slate-400 whitespace-nowrap pl-2">
+                        <td className="py-2.5 text-right tabular-nums text-slate-400 whitespace-nowrap pl-2">
                           {fmtDuration(row.seconds)}
                         </td>
-                        <td className="py-2.5 text-right font-mono text-slate-500 whitespace-nowrap pl-2">
-                          {row.hourly_rate != null ? `€${row.hourly_rate}/h` : '–'}
+                        <td className="py-2.5 text-right tabular-nums text-slate-500 whitespace-nowrap pl-2">
+                          {row.hourly_rate != null ? `${fmtMoney(row.hourly_rate)}/h` : '–'}
                         </td>
-                        <td className="py-2.5 text-right font-mono text-amber-400 font-semibold whitespace-nowrap pl-2">
-                          {row.earnings > 0 ? `€${row.earnings.toFixed(2)}` : '–'}
+                        <td className="py-2.5 text-right tabular-nums text-amber-400 font-semibold whitespace-nowrap pl-2">
+                          {row.earnings > 0 ? fmtMoney(row.earnings) : '–'}
                         </td>
                       </tr>
                     ))}
@@ -341,11 +355,14 @@ export default function Projects() {
               </div>
               <div className="text-right min-w-0">
                 <p className="text-xs text-slate-500">{t('Total earnings')}</p>
-                <p className="text-xl sm:text-2xl font-bold text-amber-400">€{billingData.total_earnings.toFixed(2)}</p>
+                <p className="text-xl sm:text-2xl font-bold text-amber-400">{fmtMoney(billingData.total_earnings)}</p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-1">
+            <div className="flex flex-wrap justify-end gap-3 pt-1">
+              <a className="btn-secondary mr-auto" href={`/statement/${billingTarget?.id}`} target="_blank" rel="noopener">
+                <Printer className="w-4 h-4" /> {t('Billing statement')}
+              </a>
               <button type="button" className="btn-ghost" onClick={() => setBillingOpen(false)}>
                 {billingTarget?.completed ? t('Close') : t('Cancel')}
               </button>

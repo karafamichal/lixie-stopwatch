@@ -103,6 +103,17 @@ enum StrId : uint8_t {
     S_WX_THUNDERSTORM,
     S_WX_UNKNOWN,
 
+    // Offline queue, idle reminder, pomodoro, firmware update
+    S_TOAST_SAVED_OFFLINE,
+    S_REMINDER_TITLE,
+    S_REMINDER_BODY,
+    S_DISMISS,
+    S_FOCUS_PREFIX,
+    S_BREAK_PREFIX,
+    S_BREAK_OVER,
+    S_UPDATING,
+    S_UPDATE_FAILED,
+
     S__COUNT
 };
 

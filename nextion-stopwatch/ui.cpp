@@ -94,6 +94,22 @@ static Screen   sSleepWakeTo        = SCR_IDLE;
 static bool     sSleepDrawnAsPaused = false;
 static bool     sSleepDrawnFromIdle = false;
 
+// Pomodoro. A focus block is counted in *active* seconds (manual pauses
+// don't use it up); sFocusBaseSec is the elapsed total when the block began.
+// When a block ends the session auto-pauses into a break (sOnBreak); once
+// the break time is over (sBreakOver) the LEDs blink until CONTINUE.
+static uint32_t sFocusBaseSec    = 0;
+static bool     sOnBreak         = false;
+static bool     sBreakOver       = false;
+static uint32_t sBreakEndMs      = 0;
+static uint32_t sLastPomoDrawSec = 0xFFFFFFFF;
+
+// Idle reminder — fires once per idle stretch (reset by any touch) and
+// gives up after REMINDER_SHOW_MS so an empty office isn't lit all night.
+static bool     sReminderShown   = false;
+static uint32_t sReminderSinceMs = 0;
+static const uint32_t REMINDER_SHOW_MS = 2UL * 60UL * 1000UL;
+
 // ---- Settings screen --------------------------------------------------------
 struct ColorPreset { const char* hex; uint16_t rgb565; };
 static const ColorPreset COLOR_PRESETS[] = {
@@ -182,6 +198,40 @@ static String formatLocalDateTime(time_t t) {
 static uint32_t currentElapsedSec() {
     if (sPaused) return sAccumSec;
     return sAccumSec + (millis() - sSegmentStartMs) / 1000;
+}
+
+static String fmtMS(uint32_t sec) {
+    char b[12]; snprintf(b, sizeof(b), "%02u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
+    return String(b);
+}
+
+static bool pomodoroOn() { return Settings::pomodoroMin() > 0; }
+
+static uint32_t focusLeftSec() {
+    uint32_t block = (uint32_t)Settings::pomodoroMin() * 60UL;
+    uint32_t used  = currentElapsedSec() - sFocusBaseSec;
+    return used >= block ? 0 : block - used;
+}
+
+static uint32_t breakLeftSec() {
+    int32_t left = (int32_t)(sBreakEndMs - millis());
+    return left > 0 ? ((uint32_t)left + 999) / 1000 : 0;
+}
+
+// Put the LED matrix in the right mode for the current session state:
+// plain stopwatch, pomodoro focus countdown, or break countdown (green).
+static void syncSessionLeds() {
+    CRGB col = rgb565ToCrgb(sSelClientColor);
+    if (sOnBreak) {
+        LedDisplay::countdown(sBreakEndMs, CRGB(0, 200, 60));
+    } else if (pomodoroOn()) {
+        if (sPaused) LedDisplay::holdDuration(focusLeftSec(), col);
+        else         LedDisplay::countdown(millis() + focusLeftSec() * 1000UL, col);
+    } else {
+        if (sPaused) LedDisplay::holdDuration(sAccumSec, col);
+        else         LedDisplay::startStopwatch(sSegmentStartMs - sAccumSec * 1000UL, col);
+    }
+    LedDisplay::setAttention(sOnBreak && sBreakOver);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +527,17 @@ static void drawAppScreen() {
     drawFooterHint(TR(S_HINT_APP));
 }
 
+// Pomodoro status in the "Started:" slot, redrawn every second from tick().
+static void drawPomodoroLine() {
+    String   line;
+    uint16_t col = COL_TEXT;
+    if (sOnBreak && sBreakOver) { line = TR(S_BREAK_OVER);                       col = COL_ACCENT; }
+    else if (sOnBreak)          { line = TR(S_BREAK_PREFIX) + fmtMS(breakLeftSec()); col = COL_GREEN;  }
+    else                        { line = TR(S_FOCUS_PREFIX) + fmtMS(focusLeftSec()); }
+    Nextion::fillRect(0, 112, DISP_W, 30, COL_BG);
+    Nextion::drawTextCentered(0, 112, DISP_W, 30, FONT_MEDIUM, col, COL_BG, line);
+}
+
 static void drawRunningScreen() {
     Nextion::clear(COL_BG);
 
@@ -506,10 +567,14 @@ static void drawRunningScreen() {
                               FONT_LARGE, projectCol, COL_BG,
                               sSelProjectName);
 
-    // Human-readable start time
-    Nextion::drawTextCentered(0, 112, DISP_W, 30,
-                              FONT_MEDIUM, COL_TEXT, COL_BG,
-                              TR(S_STARTED_PREFIX) + sStartLocal);
+    // Human-readable start time, or the pomodoro countdown when it's on.
+    if (pomodoroOn() || sOnBreak) {
+        drawPomodoroLine();
+    } else {
+        Nextion::drawTextCentered(0, 112, DISP_W, 30,
+                                  FONT_MEDIUM, COL_TEXT, COL_BG,
+                                  TR(S_STARTED_PREFIX) + sStartLocal);
+    }
 
     // Pause / Continue button (left). CONTINUE / WEITER is too long for
     // FONT_LARGE in the available 170 px width; drop to FONT_MEDIUM so it
@@ -859,6 +924,22 @@ static void drawDiscardConfirmScreen() {
                               FONT_MEDIUM, COL_WHITE, COL_RED, TR(S_YES_DISCARD));
 }
 
+static const int REM_BTN_Y = 170, REM_BTN_W = 160, REM_BTN_H = 50;
+
+static void drawReminderScreen() {
+    Nextion::clear(COL_BG);
+    Nextion::drawTextCentered(0, 40, DISP_W, 44,
+                              FONT_LARGE, COL_ACCENT, COL_BG, TR(S_REMINDER_TITLE));
+    Nextion::drawTextCentered(0, 96, DISP_W, 30,
+                              FONT_MEDIUM, COL_MUTED, COL_BG, TR(S_REMINDER_BODY));
+    Nextion::fillRect(28, REM_BTN_Y, REM_BTN_W, REM_BTN_H, COL_PANEL);
+    Nextion::drawTextCentered(28, REM_BTN_Y, REM_BTN_W, REM_BTN_H,
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL, TR(S_DISMISS));
+    Nextion::fillRect(DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H, COL_ACCENT);
+    Nextion::drawTextCentered(DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H,
+                              FONT_LARGE, COL_BLACK, COL_ACCENT, TR(S_START));
+}
+
 // ---------------------------------------------------------------------------
 // Touch handlers
 // ---------------------------------------------------------------------------
@@ -908,6 +989,13 @@ static void onScrollHit(int hit, int count, int& offset, int visibleN = LIST_VIS
     if (hit == -3 && offset + visibleN < count) { offset++; sDirty = true; }
 }
 
+static void startPicker() {
+    goTo(SCR_CLIENT);
+    sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
+    sClientOffset = 0;
+    sDirty = true;
+}
+
 static void onTouchIdle(const NextionTouch& t) {
     // Settings tile (top-right corner) → matrix colour / brightness editor.
     if (inHomeButton(t, 4)) {
@@ -923,10 +1011,16 @@ static void onTouchIdle(const NextionTouch& t) {
         return;
     }
     // Anywhere else → start the selection workflow.
-    goTo(SCR_CLIENT);
-    sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
-    sClientOffset = 0;
-    sDirty = true;
+    startPicker();
+}
+
+static void onTouchReminder(const NextionTouch& t) {
+    LedDisplay::setAttention(false);
+    if (inRect(t, DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H)) {
+        startPicker();
+    } else {
+        goTo(SCR_IDLE);   // Dismiss, or a tap anywhere else
+    }
 }
 
 // Forward-declared so the category/app touch handlers can call it before
@@ -993,7 +1087,10 @@ static void startSession(int appId, const String& appName) {
     sSegmentStartMs = millis();
     sAccumSec       = 0;
     sPaused         = false;
-    LedDisplay::startStopwatch(sStartMs, rgb565ToCrgb(sSelClientColor));
+    sFocusBaseSec   = 0;
+    sOnBreak        = false;
+    sBreakOver      = false;
+    syncSessionLeds();
     goTo(SCR_RUNNING);
 }
 
@@ -1008,20 +1105,22 @@ static void onTouchApp(const NextionTouch& t) {
 }
 
 static void togglePause() {
-    CRGB col = rgb565ToCrgb(sSelClientColor);
     if (sPaused) {
-        // Resume: start a new active segment. Tell the LED display the start
-        // time it should pretend the stopwatch began, so the displayed total
-        // continues smoothly.
+        // Resume: start a new active segment. CONTINUE during or after a
+        // pomodoro break also starts a fresh focus block.
         sSegmentStartMs = millis();
         sPaused = false;
-        LedDisplay::startStopwatch(millis() - sAccumSec * 1000UL, col);
+        if (sOnBreak) {
+            sOnBreak      = false;
+            sBreakOver    = false;
+            sFocusBaseSec = sAccumSec;
+        }
     } else {
         // Pause: bank the current segment, freeze LED matrix.
         sAccumSec += (millis() - sSegmentStartMs) / 1000;
         sPaused = true;
-        LedDisplay::holdDuration(sAccumSec, col);
     }
+    syncSessionLeds();
 }
 
 static void onTouchRunning(const NextionTouch& t) {
@@ -1051,10 +1150,19 @@ static void onTouchConfirm(const NextionTouch& t) {
         return;
     }
     if (inRect(t, DISP_W - 184, 178, 156, 44)) {  // Save
-        bool ok = Api::postTimelog(sSelClient, sSelProject, sSelApp,
-                                   sStartIso, sLastTimerSec);
+        int code = Api::postTimelog(sSelClient, sSelProject, sSelApp,
+                                    sStartIso, sLastTimerSec);
+        StrId msg = S_TOAST_SAVED_BANG;
+        if (code < 200 || code >= 300) {
+            // Server unreachable → keep the session on the device and retry
+            // later. A 4xx is a real rejection, so tell the user.
+            bool queued = Api::isRetryable(code) &&
+                          Api::queueTimelog(sSelClient, sSelProject, sSelApp,
+                                            sStartIso, sLastTimerSec);
+            msg = queued ? S_TOAST_SAVED_OFFLINE : S_TOAST_SAVE_FAILED;
+        }
         LedDisplay::clockMode();
-        toast(TR(ok ? S_TOAST_SAVED_BANG : S_TOAST_SAVE_FAILED));
+        toast(TR(msg));
     }
 }
 
@@ -1078,6 +1186,71 @@ void goTo(Screen s) {
 }
 
 Screen current() { return sScreen; }
+
+bool sessionActive() {
+    switch (sScreen) {
+        case SCR_RUNNING:
+        case SCR_CONFIRM:
+        case SCR_DISCARD_CONFIRM:
+            return true;
+        case SCR_SLEEP:
+            return sSleepWakeTo == SCR_RUNNING;
+        default:
+            return false;
+    }
+}
+
+// Pomodoro transitions + the once-a-second status line.
+static void tickPomodoro() {
+    bool inSession = sScreen == SCR_RUNNING ||
+                     (sScreen == SCR_SLEEP && sSleepWakeTo == SCR_RUNNING);
+    if (!inSession || (!pomodoroOn() && !sOnBreak)) return;
+
+    if (pomodoroOn() && !sPaused && !sOnBreak && focusLeftSec() == 0) {
+        // Focus block done → auto-pause into a break.
+        sAccumSec += (millis() - sSegmentStartMs) / 1000;
+        sPaused     = true;
+        sOnBreak    = true;
+        sBreakOver  = false;
+        sBreakEndMs = millis() + (uint32_t)Settings::breakMin() * 60000UL;
+        syncSessionLeds();
+        if (sScreen == SCR_SLEEP) wakeFromSleep(); else sDirty = true;
+        return;
+    }
+    if (sOnBreak && !sBreakOver && breakLeftSec() == 0) {
+        sBreakOver = true;
+        syncSessionLeds();
+        if (sScreen == SCR_SLEEP) wakeFromSleep(); else sDirty = true;
+        return;
+    }
+    if (sScreen == SCR_RUNNING && !sDirty) {
+        uint32_t s = millis() / 1000;
+        if (s != sLastPomoDrawSec) {
+            sLastPomoDrawSec = s;
+            drawPomodoroLine();
+        }
+    }
+}
+
+static void tickReminder() {
+    if (sScreen == SCR_REMINDER) {
+        if (millis() - sReminderSinceMs >= REMINDER_SHOW_MS) {
+            LedDisplay::setAttention(false);
+            goTo(SCR_IDLE);
+        }
+        return;
+    }
+    uint16_t mins = Settings::reminderMin();
+    bool idleStretch = sScreen == SCR_IDLE ||
+                       (sScreen == SCR_SLEEP && sSleepWakeTo == SCR_IDLE);
+    if (mins == 0 || sReminderShown || !idleStretch) return;
+    if (millis() - sLastTouchMs < (uint32_t)mins * 60000UL) return;
+    if (Settings::isNightNow()) return;   // no blinking clock at 3 am
+    sReminderShown   = true;
+    sReminderSinceMs = millis();
+    LedDisplay::setAttention(true);
+    goTo(SCR_REMINDER);
+}
 
 void redraw() { sDirty = true; }
 
@@ -1104,6 +1277,9 @@ void tick() {
         enterSleep();
     }
 
+    tickPomodoro();
+    tickReminder();
+
     // While the sleep view is up, swap the icon if running ↔ paused state
     // flipped underneath us (e.g. a dashboard-driven pause/continue).
     if (sScreen == SCR_SLEEP) {
@@ -1128,6 +1304,7 @@ void tick() {
             case SCR_SETTINGS:        drawSettingsScreen();       break;
             case SCR_TOAST:           drawToastScreen();          break;
             case SCR_SLEEP:           drawSleepScreen();          break;
+            case SCR_REMINDER:        drawReminderScreen();       break;
         }
         sDirty = false;
     }
@@ -1151,7 +1328,8 @@ void tick() {
 
 void handleTouch(const NextionTouch& t) {
     if (!t.pressed) return;  // act on press, ignore release
-    sLastTouchMs = millis();
+    sLastTouchMs   = millis();
+    sReminderShown = false;
     switch (sScreen) {
         case SCR_IDLE:            onTouchIdle(t);           break;
         case SCR_CLIENT:          onTouchClient(t);         break;
@@ -1163,6 +1341,7 @@ void handleTouch(const NextionTouch& t) {
         case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
         case SCR_SETTINGS:        onTouchSettings(t);       break;
         case SCR_SLEEP:           onTouchSleep(t);          break;
+        case SCR_REMINDER:        onTouchReminder(t);       break;
         default: break;
     }
 }
@@ -1194,6 +1373,7 @@ LiveSnapshot getLiveSnapshot() {
         case SCR_SETTINGS:        s.state = "idle";       s.screen = "settings";        break;
         case SCR_TOAST:           s.state = "idle";       s.screen = "toast";           break;
         case SCR_BOOT:            s.state = "boot";       s.screen = "boot";            break;
+        case SCR_REMINDER:        s.state = "idle";       s.screen = "reminder";        break;
         case SCR_SLEEP:
             // Report the underlying activity so the dashboard's "live" view
             // still reads "running" / "paused" / "idle" — only the on-device
@@ -1278,6 +1458,10 @@ void writeStateExtras(JsonDocument& doc) {
     }
     else if (sScreen == SCR_TOAST) {
         doc["toast_message"] = sToastMsg;
+    }
+    else if (sScreen == SCR_RUNNING && (pomodoroOn() || sOnBreak)) {
+        doc["pomo_phase"] = sOnBreak ? (sBreakOver ? "break_over" : "break") : "focus";
+        doc["pomo_left"]  = sOnBreak ? breakLeftSec() : focusLeftSec();
     }
 }
 

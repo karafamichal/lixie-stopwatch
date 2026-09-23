@@ -49,6 +49,35 @@ void setSleepOnIdle(bool on);
 Language language();
 void     setLanguage(Language l);
 
+// Pomodoro: focus block length in minutes (0 = off) and the break that
+// follows each block. Dashboard-only.
+uint8_t pomodoroMin();
+void    setPomodoroMin(uint8_t m);
+uint8_t breakMin();
+void    setBreakMin(uint8_t m);
+
+// Idle reminder: minutes on the home screen without a touch before the
+// "Forgot to start?" prompt appears (0 = off). Dashboard-only.
+uint16_t reminderMin();
+void     setReminderMin(uint16_t m);
+
+// Night mode: between nightStart and nightEnd (local hours, 0..23, the
+// window may wrap past midnight) the LED matrix drops to nightBrightness
+// (0 = off). Disabled while start == end. Dashboard-only.
+uint8_t nightStart();
+uint8_t nightEnd();
+uint8_t nightBrightness();
+void    setNightStart(uint8_t h);
+void    setNightEnd(uint8_t h);
+void    setNightBrightness(uint8_t b);
+
+// True while the local time is inside the night window (false before NTP).
+bool isNightNow();
+
+// Call about once a second. Applies the night brightness or the normal one;
+// `sessionActive` keeps full brightness while someone is timing work.
+void applyNightMode(bool sessionActive);
+
 }  // namespace Settings
 
 #endif

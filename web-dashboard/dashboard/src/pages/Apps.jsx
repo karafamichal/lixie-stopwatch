@@ -5,7 +5,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
-import { t } from '../i18n';
+import { t, fmtMoney, usePrefs } from '../i18n';
 
 const CATEGORY_ORDER = [
   'Design', '3D / Video', 'Office', 'Development',
@@ -15,6 +15,7 @@ const CATEGORY_ORDER = [
 const emptyForm = { name: '', category: 'Other', icon: '🖥️', color: '#FF8000', hourly_rate: '', logo: null };
 
 export default function Apps() {
+  const { currency } = usePrefs();
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterCat, setFilterCat] = useState('All');
@@ -121,7 +122,7 @@ export default function Apps() {
               onClick={() => setFilterCat(cat)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filterCat === cat
-                  ? 'bg-amber-500 text-slate-900'
+                  ? 'bg-amber-500 text-onaccent'
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
               }`}
             >
@@ -146,7 +147,7 @@ export default function Apps() {
           {sortedCats.map(cat => (
             <div key={cat} className="card overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-700/40 border-b border-slate-700">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t(cat)}</span>
+                <span className="text-xs font-medium text-slate-400">{t(cat)}</span>
               </div>
 
               {/* Desktop: table */}
@@ -165,7 +166,7 @@ export default function Apps() {
                       <td className="td">
                         {a.hourly_rate != null ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                            €{a.hourly_rate}/h
+                            {fmtMoney(a.hourly_rate)}/h
                           </span>
                         ) : (
                           <span className="text-xs text-slate-600 italic">{t('no rate set')}</span>
@@ -221,7 +222,7 @@ export default function Apps() {
                       <div className="flex items-center gap-2 mt-0.5">
                         {a.hourly_rate != null ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                            €{a.hourly_rate}/h
+                            {fmtMoney(a.hourly_rate)}/h
                           </span>
                         ) : (
                           <span className="text-[11px] text-slate-600 italic">{t('no rate')}</span>
@@ -308,9 +309,9 @@ export default function Apps() {
           <div>
             <label className="label">{t('Hourly Rate')} <span className="text-slate-500 font-normal">{t('(optional, for billing)')}</span></label>
             <div className="relative w-36">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">{currency}</span>
               <input
-                className="input pl-6"
+                className="input pl-12"
                 type="number"
                 min="0"
                 step="0.01"

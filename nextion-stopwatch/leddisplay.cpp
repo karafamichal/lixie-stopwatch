@@ -19,7 +19,7 @@
 
 namespace LedDisplay {
 
-enum Mode { MODE_BLANK, MODE_CLOCK, MODE_STOPWATCH, MODE_HOLD };
+enum Mode { MODE_BLANK, MODE_CLOCK, MODE_STOPWATCH, MODE_HOLD, MODE_COUNTDOWN };
 
 static Mode     sMode        = MODE_BLANK;
 static CRGB     sColor       = CRGB(255, 128, 0); // active draw colour
@@ -30,8 +30,15 @@ static uint32_t sLastSec     = 0xFFFFFFFF;          // force first draw
 // Colon phase. Flipped once per visible second tick. Tracked here so we can
 // also pin it on (HOLD) or off (BLANK) without disturbing the toggle counter.
 static bool     sColonOn     = false;
+static uint32_t sEndMs       = 0;                   // MODE_COUNTDOWN target
+static bool     sAttention   = false;               // blink the digits
+static bool     sAttnDark    = false;               // current blink phase
 
 static void pushTime(uint32_t totalSec) {
+    if (sAttention && sAttnDark) {
+        showDigits(-1, -1, -1, -1, -1, -1, sColor);
+        return;
+    }
     uint32_t s = totalSec % 60;
     uint32_t m = (totalSec / 60) % 60;
     uint32_t h = (totalSec / 3600) % 24;
@@ -67,10 +74,25 @@ void holdDuration(uint32_t totalSeconds, CRGB color) {
     sLastSec     = 0xFFFFFFFF;
 }
 
-void clockMode() {
-    sMode    = MODE_CLOCK;
-    sColor   = sClockColor;
+void countdown(uint32_t endMs, CRGB color) {
+    sMode    = MODE_COUNTDOWN;
+    sEndMs   = endMs;
+    sColor   = color;
     sLastSec = 0xFFFFFFFF;
+}
+
+void setAttention(bool on) {
+    sAttention = on;
+    sAttnDark  = false;
+    sLastSec   = 0xFFFFFFFF;   // redraw with digits visible
+}
+
+void clockMode() {
+    sMode      = MODE_CLOCK;
+    sColor     = sClockColor;
+    sAttention = false;
+    sAttnDark  = false;
+    sLastSec   = 0xFFFFFFFF;
 }
 
 void setClockColor(CRGB c) {
@@ -103,6 +125,15 @@ void blank() {
 }
 
 void tick() {
+    // Attention blink: flip every 500 ms and force the active mode to redraw.
+    if (sAttention) {
+        bool dark = (millis() / 500) & 1;
+        if (dark != sAttnDark) {
+            sAttnDark = dark;
+            sLastSec  = 0xFFFFFFFF;
+        }
+    }
+
     switch (sMode) {
         case MODE_BLANK:
             forceColon(false);
@@ -132,6 +163,17 @@ void tick() {
                 sLastSec = elapsedSec;
                 pushTime(elapsedSec);
                 forceColon(!sColonOn);
+            }
+            return;
+        }
+
+        case MODE_COUNTDOWN: {
+            int32_t  leftMs = (int32_t)(sEndMs - millis());
+            uint32_t sec    = leftMs > 0 ? ((uint32_t)leftMs + 999) / 1000 : 0;
+            if (sec != sLastSec) {
+                sLastSec = sec;
+                pushTime(sec);
+                forceColon(sec == 0 ? true : !sColonOn);
             }
             return;
         }

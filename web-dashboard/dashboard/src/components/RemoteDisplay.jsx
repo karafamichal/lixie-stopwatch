@@ -84,6 +84,12 @@ const STRINGS = {
     brightLabels:      ['Low', 'Med', 'High', 'Max'],
     cancel:            'Cancel',
     booting:           'Booting…',
+    reminderTitle:     'Forgot to start?',
+    reminderBody:      'No timer has run for a while.',
+    dismiss:           'Dismiss',
+    focus:             'Focus:',
+    brk:               'Break:',
+    breakOver:         'Break over - tap CONTINUE',
   },
   de: {
     back:              '< Zurueck',
@@ -118,6 +124,12 @@ const STRINGS = {
     brightLabels:      ['Min', 'Mittel', 'Hoch', 'Max'],
     cancel:            'Abbrechen',
     booting:           'Startet…',
+    reminderTitle:     'Timer vergessen?',
+    reminderBody:      'Seit einer Weile laeuft kein Timer.',
+    dismiss:           'Schliessen',
+    focus:             'Fokus:',
+    brk:               'Pause:',
+    breakOver:         'Pause vorbei - WEITER tippen',
   },
 };
 
@@ -403,9 +415,19 @@ function RunningScreen({ state }) {
              color={state?.project_color || COL.text}>
         {state?.project_name || '—'}
       </Label>
-      <Label x={0} y={112} w={DISP_W} h={30} size={14}>
-        {t.elapsed} {fmtHMS(state?.elapsed_seconds)}
-      </Label>
+      {/* Pomodoro countdown replaces the elapsed line, like drawPomodoroLine() */}
+      {state?.pomo_phase ? (
+        <Label x={0} y={112} w={DISP_W} h={30} size={14}
+               color={state.pomo_phase === 'break' ? COL.green : state.pomo_phase === 'break_over' ? COL.accent : COL.text}>
+          {state.pomo_phase === 'break_over'
+            ? t.breakOver
+            : `${state.pomo_phase === 'break' ? t.brk : t.focus} ${fmtHMS(state.pomo_left).slice(3)}`}
+        </Label>
+      ) : (
+        <Label x={0} y={112} w={DISP_W} h={30} size={14}>
+          {t.elapsed} {fmtHMS(state?.elapsed_seconds)}
+        </Label>
+      )}
 
       {/* Pause / Continue (left). PAUSE = neutral grey #6B6B6B to match
           the firmware (COL_GREY); CONTINUE stays green for the affordance. */}
@@ -514,6 +536,23 @@ function SettingsScreen({ state }) {
   );
 }
 
+// "Forgot to start?" prompt — mirrors drawReminderScreen() in ui.cpp.
+function ReminderScreen({ state }) {
+  const t = strings(state);
+  return (
+    <>
+      <Label x={0} y={40} w={DISP_W} h={44} size={22} weight={700} color={COL.accent}>{t.reminderTitle}</Label>
+      <Label x={0} y={96} w={DISP_W} h={30} size={14} color={COL.muted}>{t.reminderBody}</Label>
+      <Rect x={28} y={170} w={160} h={50} bg={COL.panel}>
+        <Label x={0} y={0} w={160} h={50} size={14} color={COL.muted}>{t.dismiss}</Label>
+      </Rect>
+      <Rect x={DISP_W - 188} y={170} w={160} h={50} bg={COL.accent}>
+        <Label x={0} y={0} w={160} h={50} size={22} weight={700} color={COL.black}>{t.start}</Label>
+      </Rect>
+    </>
+  );
+}
+
 function ToastScreen({ state }) {
   return (
     <Rect x={20} y={80} w={DISP_W - 40} h={80} bg={COL.panel}>
@@ -599,6 +638,7 @@ function ScreenContent({ screen, state }) {
     case 'toast':           return <ToastScreen state={state} />;
     case 'boot':            return <BootScreen state={state} />;
     case 'sleep':           return <SleepScreen state={state} />;
+    case 'reminder':        return <ReminderScreen state={state} />;
     default:                return <IdleScreen state={state} />;
   }
 }

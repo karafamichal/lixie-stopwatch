@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { t } from '../i18n';
+import { t, locale, usePrefs } from '../i18n';
+import { toCsv, downloadText } from '../csv';
 
 function fmtDuration(s) {
   const h = Math.floor(s / 3600);
@@ -16,9 +17,28 @@ function fmtDuration(s) {
 
 function fmtDateTime(iso) {
   if (!iso) return '–';
-  const d = new Date(iso);
-  const p = n => String(n).padStart(2, '0');
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return new Date(iso).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
+}
+
+// Export exactly what the filters show. German Excel expects ';' and a
+// decimal comma, so both follow the dashboard language.
+function exportCsv(logs, lang) {
+  const sep = lang === 'de' ? ';' : ',';
+  const hours = (sec) => (sec / 3600).toLocaleString(locale(), { maximumFractionDigits: 2, useGrouping: false });
+  const rows = [
+    [t('Date'), t('Start time'), t('Hours'), t('Client'), t('Project'), t('Application'), t('Device'), t('Notes'), t('Status')],
+    ...logs.map(l => {
+      const d = new Date(l.start_timestamp);
+      return [
+        d.toLocaleDateString(locale()),
+        d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }),
+        hours(l.duration_seconds),
+        l.client_name, l.project_name, l.app_name || '',
+        l.device_label || l.hardware_id || '', l.notes || '', t(l.status),
+      ];
+    }),
+  ];
+  downloadText(toCsv(rows, sep), `time-logs-${new Date().toISOString().slice(0, 10)}.csv`);
 }
 
 function secsToHMS(s) {
@@ -54,6 +74,7 @@ const emptyForm = {
 };
 
 export default function TimeLogs() {
+  const { lang } = usePrefs();
   const [logs, setLogs] = useState([]);
   const [clients, setClients] = useState([]);
   const [allApps, setAllApps] = useState([]);
@@ -188,17 +209,21 @@ export default function TimeLogs() {
     const secs = hmsToSecs(form.duration_hms);
     if (!secs || secs <= 0) return null;
     const d = new Date(new Date(form.start_timestamp).getTime() + secs * 1000);
-    const p = n => String(n).padStart(2, '0');
-    return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return fmtDateTime(d.toISOString());
   })();
 
   return (
     <div>
       <div className="page-header">
         <h1 className="page-title">{t('Time Logs')}</h1>
-        <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
-          <Plus className="w-4 h-4" /> {t('Add Entry')}
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button className="btn-secondary" onClick={() => exportCsv(logs, lang)} disabled={logs.length === 0}>
+            <Download className="w-4 h-4" /> {t('Export CSV')}
+          </button>
+          <button className="btn-primary" onClick={openCreate}>
+            <Plus className="w-4 h-4" /> {t('Add Entry')}
+          </button>
+        </div>
       </div>
 
       {/* Filters — stack on phone, wrap on desktop. */}
@@ -254,7 +279,7 @@ export default function TimeLogs() {
                     : <span className="text-slate-600">–</span>}
                 </td>
                 <td className="td text-sm text-slate-400">{fmtDateTime(l.start_timestamp)}</td>
-                <td className="td text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</td>
+                <td className="td text-sm tabular-nums text-amber-400">{fmtDuration(l.duration_seconds)}</td>
                 <td className="td text-sm text-slate-500 max-w-[160px] truncate" title={l.notes}>{l.notes || ''}</td>
                 <td className="td">
                   <span className={l.status === 'completed' ? 'badge-completed' : 'badge-pending'}>
@@ -291,7 +316,7 @@ export default function TimeLogs() {
                 <p className="text-xs text-slate-400 truncate">{l.project_name}</p>
               </div>
               <div className="text-right flex-shrink-0">
-                <p className="text-sm font-mono text-amber-400">{fmtDuration(l.duration_seconds)}</p>
+                <p className="text-sm tabular-nums text-amber-400">{fmtDuration(l.duration_seconds)}</p>
                 <p className="text-[11px] text-slate-500">{fmtDateTime(l.start_timestamp)}</p>
               </div>
             </div>
@@ -375,7 +400,7 @@ export default function TimeLogs() {
                     onClick={() => setForm(p => ({ ...p, time_mode: m.key }))}
                     className={`px-3 py-1.5 font-medium transition-colors ${
                       form.time_mode === m.key
-                        ? 'bg-amber-500 text-slate-900'
+                        ? 'bg-amber-500 text-onaccent'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >

@@ -1,16 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Pencil, Trash2, Wifi, WifiOff, Palette, MonitorSmartphone } from 'lucide-react';
+import { Pencil, Trash2, Wifi, WifiOff, Palette, MonitorSmartphone, Download } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import RemoteDisplay from '../components/RemoteDisplay';
+import { t, locale } from '../i18n';
 
 const BRIGHTNESS_LEVELS = [
   { label: 'Low',  value: 30  },
   { label: 'Med',  value: 80  },
   { label: 'High', value: 150 },
   { label: 'Max',  value: 250 },
+];
+
+// UI languages the firmware ships (nextion-stopwatch/lang.cpp). `code` is
+// what goes over the wire; `label` is the native name the device itself
+// shows on its Settings screen.
+const DISPLAY_LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'Deutsch' },
 ];
 
 // A device is "live" if we've received a WS state push from it in the last
@@ -20,6 +29,65 @@ const LIVE_WINDOW_MS = 15000;
 // REST fallback: a `last_seen` newer than this counts as online even without
 // a WS message yet (covers page load before the first WS state arrives).
 const RECENT_LAST_SEEN_MS = 60000;
+
+// Pomodoro / reminder / night-mode settings (firmware 1.1+). Night mode is
+// off while night_start == night_end.
+const DEFAULT_EXTRA = {
+  pomodoro_min: 0, break_min: 5, reminder_min: 0,
+  night_start: 0, night_end: 0, night_brightness: 10,
+};
+const EXTRA_RANGES = {
+  pomodoro_min: [0, 120], break_min: [1, 60], reminder_min: [0, 480],
+  night_start: [0, 23], night_end: [0, 23], night_brightness: [0, 255],
+};
+const NIGHT_LEVELS = [
+  { label: 'LEDs off', value: 0 },
+  { label: 'Very dim', value: 10 },
+  { label: 'Dim',      value: 40 },
+];
+
+function clampInt(v, [lo, hi], fallback) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
+}
+
+function Toggle({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
+      <span className="text-sm text-slate-300">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+          checked ? 'bg-amber-500' : 'bg-slate-600'
+        }`}
+      >
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`} />
+      </button>
+    </label>
+  );
+}
+
+function NumberField({ value, onChange, min, max, label }) {
+  return (
+    <input type="number" className="input w-20" min={min} max={max} aria-label={label}
+      value={value} onChange={e => onChange(e.target.value)} />
+  );
+}
+
+function HourSelect({ value, onChange, label }) {
+  return (
+    <select className="input w-24" value={value} aria-label={label} onChange={e => onChange(parseInt(e.target.value, 10))}>
+      {Array.from({ length: 24 }, (_, h) => (
+        <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+      ))}
+    </select>
+  );
+}
 
 function findBrightnessIdx(v) {
   if (v == null) return 3;
@@ -45,8 +113,16 @@ export default function Devices() {
   const [settingsDispBri,   setSettingsDispBri]   = useState(100);     // 0..100 %
   const [settingsSleepSec,  setSettingsSleepSec]  = useState(30);
   const [settingsSleepIdle, setSettingsSleepIdle] = useState(false);
+  const [settingsLang,      setSettingsLang]      = useState('en');
   const [settingsBusy,      setSettingsBusy]      = useState(false);
   const [settingsFlash,     setSettingsFlash]     = useState('');
+  const [extra,             setExtra]             = useState(DEFAULT_EXTRA);
+  const setX = (key, value) => setExtra(e => ({ ...e, [key]: value }));
+
+  // Firmware update
+  const [fwInfo,    setFwInfo]    = useState(null);
+  const [otaTarget, setOtaTarget] = useState(null);
+  const [otaFlash,  setOtaFlash]  = useState('');
 
   // Live presence + full last state — hardware_id -> { ...device_state, _ts }.
   const [liveStates, setLiveStates] = useState({});
@@ -64,6 +140,7 @@ export default function Devices() {
   }, []);
 
   useEffect(load, [load]);
+  useEffect(() => { api.firmware.info().then(setFwInfo).catch(() => {}); }, []);
 
   // Tick a local clock so the icon flips back to offline even when the WS
   // goes silent (e.g. device powered off — no message to react to).
@@ -159,7 +236,10 @@ export default function Devices() {
       setSettingsDispBri  (s.display_brightness != null ? s.display_brightness : 100);
       setSettingsSleepSec (s.sleep_timeout_sec  != null ? s.sleep_timeout_sec  : 30);
       setSettingsSleepIdle(s.sleep_on_idle === true);
+      setSettingsLang     (s.language || 'en');
+      setExtra(Object.fromEntries(Object.entries(DEFAULT_EXTRA).map(([k, d]) => [k, s[k] ?? d])));
     } catch {
+      setExtra(DEFAULT_EXTRA);
       setSettingsColor('#FF8000');
       setSettingsColon('#FF8000');
       setSettingsLinked(true);
@@ -167,6 +247,7 @@ export default function Devices() {
       setSettingsDispBri(100);
       setSettingsSleepSec(30);
       setSettingsSleepIdle(false);
+      setSettingsLang('en');
     } finally {
       setSettingsBusy(false);
     }
@@ -183,39 +264,79 @@ export default function Devices() {
         display_brightness: settingsDispBri,
         sleep_timeout_sec:  settingsSleepSec,
         sleep_on_idle:      settingsSleepIdle,
+        language:           settingsLang,
+        ...Object.fromEntries(Object.entries(extra).map(
+          ([k, v]) => [k, clampInt(v, EXTRA_RANGES[k], DEFAULT_EXTRA[k])])),
       };
       // When unlinked, send the user's colon choice; when linked, the server
       // mirrors `color` so we don't need to send colon_color at all.
       if (!settingsLinked) payload.colon_color = settingsColon;
       const res = await api.devices.setSettings(settingsTarget.id, payload);
       setSettingsFlash(res.delivered
-        ? 'Sent to device.'
-        : 'Saved — device is offline, will apply on next connect.');
+        ? t('Sent to device.')
+        : t('Saved — device is offline, will apply on next connect.'));
       setTimeout(() => setSettingsTarget(null), 1100);
     } catch (e) {
-      setSettingsFlash(e.response?.data?.error || 'Failed to save');
+      setSettingsFlash(e.response?.data?.error || t('Failed to save'));
     } finally {
       setSettingsBusy(false);
     }
+  };
+
+  const installFirmware = async () => {
+    const d = otaTarget;
+    setOtaTarget(null);
+    try {
+      const res = await api.firmware.install(d.id);
+      setOtaFlash(res.delivered
+        ? t('Update sent to {name}. It installs as soon as no session is running, then the device restarts.', { name: d.label || d.hardware_id })
+        : t('{name} is offline. Try again when it is connected.', { name: d.label || d.hardware_id }));
+    } catch (e) {
+      setOtaFlash(e.response?.data?.error || t('Something went wrong'));
+    }
+  };
+
+  const firmwareCell = (d) => {
+    const live = liveStates[d.hardware_id];
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <span className="text-slate-300">{live?.fw || '–'}</span>
+        {live?.queued > 0 && (
+          <span className="badge-pending" title={t('Sessions saved on the device while the server was unreachable')}>
+            {t('{n} waiting to sync', { n: live.queued })}
+          </span>
+        )}
+        {live?.ota_status === 'waiting' && <span className="text-xs text-slate-500">{t('update waiting')}</span>}
+        {live?.ota_status === 'failed' && <span className="text-xs text-red-400">{t('update failed')}</span>}
+      </div>
+    );
   };
 
   const deviceActions = (d) => (
     <div className="flex justify-end gap-1">
       <button
         className="icon-btn"
-        title="Remote control (mirror the display)"
+        title={fwInfo ? t('Install uploaded firmware') : t('Upload firmware under Settings first')}
+        onClick={() => setOtaTarget(d)}
+        disabled={!fwInfo || !isOnline(d)}
+      >
+        <Download className="w-4 h-4" />
+      </button>
+      <button
+        className="icon-btn"
+        title={t('Remote control (mirror the display)')}
         onClick={() => setRemoteTarget(d)}
         disabled={!isOnline(d)}
       >
         <MonitorSmartphone className={`w-4 h-4 ${isOnline(d) ? '' : 'opacity-30'}`} />
       </button>
-      <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
+      <button className="icon-btn" title={t('Device settings')} onClick={() => openSettings(d)}>
         <Palette className="w-4 h-4" />
       </button>
-      <button className="icon-btn" title="Edit label" onClick={() => openEdit(d)}>
+      <button className="icon-btn" title={t('Edit label')} onClick={() => openEdit(d)}>
         <Pencil className="w-4 h-4" />
       </button>
-      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(d)}>
+      <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(d)}>
         <Trash2 className="w-4 h-4" />
       </button>
     </div>
@@ -225,30 +346,35 @@ export default function Devices() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Devices</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Devices register automatically on first time log submission</p>
+          <h1 className="page-title">{t('Devices')}</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{t('Devices register automatically on first time log submission')}</p>
         </div>
       </div>
+
+      {otaFlash && (
+        <p className="card px-4 py-3 mb-4 text-sm text-slate-300" role="status">{otaFlash}</p>
+      )}
 
       {/* Desktop: table */}
       <div className="hidden md:block card overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="bg-slate-800/60">
-              <th className="th">Status</th>
-              <th className="th">Hardware ID</th>
-              <th className="th">Label</th>
-              <th className="th">Last Seen</th>
-              <th className="th text-right">Actions</th>
+              <th className="th">{t('Status')}</th>
+              <th className="th">{t('Hardware ID')}</th>
+              <th className="th">{t('Label')}</th>
+              <th className="th">{t('Firmware')}</th>
+              <th className="th">{t('Last Seen')}</th>
+              <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="td text-center text-slate-500 py-10">Loading…</td></tr>
+              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : devices.length === 0 ? (
               <tr>
-                <td colSpan={5} className="td text-center text-slate-500 py-10">
-                  No devices yet. Devices appear here after the ESP32 sends its first time log.
+                <td colSpan={6} className="td text-center text-slate-500 py-10">
+                  {t('No devices yet. Devices appear here after the ESP32 sends its first time log.')}
                 </td>
               </tr>
             ) : devices.map(d => {
@@ -257,13 +383,14 @@ export default function Devices() {
                 <tr key={d.id} className="tr">
                   <td className="td">
                     {online
-                      ? <Wifi className="w-4 h-4 text-green-400" title="Online (seen < 5 min ago)" />
-                      : <WifiOff className="w-4 h-4 text-slate-600" title="Offline" />}
+                      ? <Wifi className="w-4 h-4 text-green-400" title={t('Online (seen < 5 min ago)')} />
+                      : <WifiOff className="w-4 h-4 text-slate-600" title={t('Offline')} />}
                   </td>
                   <td className="td font-mono text-sm text-amber-400">{d.hardware_id}</td>
-                  <td className="td text-sm text-slate-300">{d.label || <span className="text-slate-600 italic">no label</span>}</td>
+                  <td className="td text-sm text-slate-300">{d.label || <span className="text-slate-600 italic">{t('no label')}</span>}</td>
+                  <td className="td">{firmwareCell(d)}</td>
                   <td className="td text-sm text-slate-500">
-                    {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
+                    {d.last_seen ? new Date(d.last_seen).toLocaleString(locale()) : '–'}
                   </td>
                   <td className="td">{deviceActions(d)}</td>
                 </tr>
@@ -276,26 +403,27 @@ export default function Devices() {
       {/* Mobile: card list */}
       <div className="md:hidden space-y-3">
         {loading ? (
-          <p className="text-center text-slate-500 py-10">Loading…</p>
+          <p className="text-center text-slate-500 py-10">{t('Loading…')}</p>
         ) : devices.length === 0 ? (
-          <p className="text-center text-slate-500 py-10">No devices yet.</p>
+          <p className="text-center text-slate-500 py-10">{t('No devices yet.')}</p>
         ) : devices.map(d => {
           const online = isOnline(d);
           return (
             <div key={d.id} className="card p-3 sm:p-4">
               <div className="flex items-center gap-3 mb-2">
                 {online
-                  ? <Wifi className="w-5 h-5 text-green-400 flex-shrink-0" title="Online" />
-                  : <WifiOff className="w-5 h-5 text-slate-600 flex-shrink-0" title="Offline" />}
+                  ? <Wifi className="w-5 h-5 text-green-400 flex-shrink-0" title={t('Online')} />
+                  : <WifiOff className="w-5 h-5 text-slate-600 flex-shrink-0" title={t('Offline')} />}
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-sm text-amber-400 truncate">{d.hardware_id}</p>
                   <p className="text-xs text-slate-400 truncate">
-                    {d.label || <span className="text-slate-600 italic">no label</span>}
+                    {d.label || <span className="text-slate-600 italic">{t('no label')}</span>}
                   </p>
                 </div>
               </div>
+              <div className="mb-2">{firmwareCell(d)}</div>
               <p className="text-xs text-slate-500 mb-2">
-                Last seen: {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
+                {t('Last seen: {t}', { t: d.last_seen ? new Date(d.last_seen).toLocaleString(locale()) : '–' })}
               </p>
               <div className="border-t border-slate-700/60 pt-2 -mb-1">
                 {deviceActions(d)}
@@ -305,22 +433,22 @@ export default function Devices() {
         })}
       </div>
 
-      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Device Label" size="sm">
+      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title={t('Edit Device Label')} size="sm">
         <form onSubmit={handleSaveLabel} className="space-y-4">
           <p className="text-xs text-slate-500 font-mono">{editTarget?.hardware_id}</p>
           <div>
-            <label className="label">Label</label>
+            <label className="label">{t('Label')}</label>
             <input
               className="input"
               type="text"
-              placeholder="e.g. Room 3 – Station A"
+              placeholder={t('e.g. Room 3 – Station A')}
               value={label}
               onChange={e => setLabel(e.target.value)}
             />
           </div>
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setEditTarget(null)}>Cancel</button>
-            <button type="submit" className="btn-primary">Save Label</button>
+            <button type="button" className="btn-ghost" onClick={() => setEditTarget(null)}>{t('Cancel')}</button>
+            <button type="submit" className="btn-primary">{t('Save Label')}</button>
           </div>
         </form>
       </Modal>
@@ -329,25 +457,25 @@ export default function Devices() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Delete Device"
-        message={`Remove device "${deleteTarget?.hardware_id}"? Time logs from this device are kept.`}
+        title={t('Delete Device')}
+        message={t('Remove device "{id}"? Time logs from this device are kept.', { id: deleteTarget?.hardware_id })}
       />
 
-      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title="Matrix Settings" size="sm">
+      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title={t('Device settings')} size="sm">
         <div className="space-y-4">
           <p className="text-xs text-slate-500 font-mono">
             {settingsTarget?.hardware_id}
           </p>
 
           <div>
-            <p className="label mb-2">Clock colour</p>
+            <p className="label mb-2">{t('Clock colour')}</p>
             <ColorPicker value={settingsColor} onChange={setSettingsColor} />
           </div>
 
           <div>
             <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
               <span className="text-sm text-slate-300">
-                Use same colour for the blinking dots
+                {t('Use same colour for the blinking dots')}
               </span>
               <button
                 type="button"
@@ -367,14 +495,14 @@ export default function Devices() {
             </label>
             {!settingsLinked && (
               <div className="mt-3 pl-1">
-                <p className="label mb-2">Colon dot colour</p>
+                <p className="label mb-2">{t('Colon dot colour')}</p>
                 <ColorPicker value={settingsColon} onChange={setSettingsColon} />
               </div>
             )}
           </div>
 
           <div>
-            <p className="label mb-2">LED matrix brightness</p>
+            <p className="label mb-2">{t('LED matrix brightness')}</p>
             <div className="grid grid-cols-4 gap-2">
               {BRIGHTNESS_LEVELS.map((b, i) => {
                 const active = findBrightnessIdx(settingsBright) === i;
@@ -385,23 +513,23 @@ export default function Devices() {
                     onClick={() => setSettingsBright(b.value)}
                     className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
                       active
-                        ? 'bg-amber-500 text-slate-900 border-amber-400'
+                        ? 'bg-amber-500 text-onaccent border-amber-400'
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
                     }`}
                   >
-                    {b.label}
+                    {t(b.label)}
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-slate-500 mt-1">Current: {settingsBright} / 255</p>
+            <p className="text-xs text-slate-500 mt-1">{t('Current: {v} / 255', { v: settingsBright })}</p>
           </div>
 
           <div>
             <div className="flex items-baseline justify-between mb-2">
-              <p className="label mb-0">Touch display brightness</p>
+              <p className="label mb-0">{t('Touch display brightness')}</p>
               <span className="text-xs text-slate-500">
-                {settingsDispBri === 0 ? 'display off' : `${settingsDispBri} %`}
+                {settingsDispBri === 0 ? t('display off') : `${settingsDispBri} %`}
               </span>
             </div>
             <input
@@ -412,12 +540,12 @@ export default function Devices() {
               value={settingsDispBri}
               onChange={e => setSettingsDispBri(parseInt(e.target.value, 10))}
               className="w-full accent-amber-500"
-              aria-label="Touch display brightness percent"
+              aria-label={t('Touch display brightness percent')}
             />
           </div>
 
           <div className="space-y-2">
-            <p className="label mb-0">Auto-sleep</p>
+            <p className="label mb-0">{t('Auto-sleep')}</p>
             <div className="flex items-center gap-3">
               <input
                 type="number"
@@ -432,15 +560,15 @@ export default function Devices() {
                 className="input w-24"
               />
               <span className="text-xs text-slate-400">
-                seconds idle before the screen shows just an icon
+                {t('seconds idle before the screen shows just an icon')}
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              0 disables auto-sleep. While running: stopwatch icon. While paused: coffee cup.
+              {t('0 disables auto-sleep. While running: stopwatch icon. While paused: coffee cup.')}
             </p>
             <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
               <span className="text-sm text-slate-300">
-                Also sleep from the idle / home screen (shows the coffee cup)
+                {t('Also sleep from the idle / home screen (shows the coffee cup)')}
               </span>
               <button
                 type="button"
@@ -460,29 +588,133 @@ export default function Devices() {
             </label>
           </div>
 
+          <div className="space-y-2 border-t border-slate-700 pt-4">
+            <Toggle
+              label={t('Pomodoro timer')}
+              checked={extra.pomodoro_min > 0}
+              onChange={on => setX('pomodoro_min', on ? 25 : 0)}
+            />
+            {extra.pomodoro_min > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                <NumberField value={extra.pomodoro_min} min={1} max={120} label={t('Focus minutes')}
+                  onChange={v => setX('pomodoro_min', v)} />
+                <span>{t('min focus, then')}</span>
+                <NumberField value={extra.break_min} min={1} max={60} label={t('Break minutes')}
+                  onChange={v => setX('break_min', v)} />
+                <span>{t('min break')}</span>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-500">
+              {t('The LEDs count down each focus block. The session pauses for the break, and the digits blink when the break is over.')}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Toggle
+              label={t('Remind me to start the timer')}
+              checked={extra.reminder_min > 0}
+              onChange={on => setX('reminder_min', on ? 30 : 0)}
+            />
+            {extra.reminder_min > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                <span>{t('after')}</span>
+                <NumberField value={extra.reminder_min} min={1} max={480} label={t('Reminder minutes')}
+                  onChange={v => setX('reminder_min', v)} />
+                <span>{t('minutes on the home screen without a touch')}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Toggle
+              label={t('Dim the LEDs at night')}
+              checked={extra.night_start !== extra.night_end}
+              onChange={on => setExtra(e => ({ ...e, night_start: on ? 22 : 0, night_end: on ? 7 : 0 }))}
+            />
+            {extra.night_start !== extra.night_end && (
+              <>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+                  <span>{t('From')}</span>
+                  <HourSelect value={extra.night_start} label={t('Night starts')} onChange={v => setX('night_start', v)} />
+                  <span>{t('to')}</span>
+                  <HourSelect value={extra.night_end} label={t('Night ends')} onChange={v => setX('night_end', v)} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {NIGHT_LEVELS.map(l => (
+                    <button key={l.value} type="button" onClick={() => setX('night_brightness', l.value)}
+                      className={`seg ${Number(extra.night_brightness) === l.value ? 'seg-on' : ''}`}>
+                      {t(l.label)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <p className="text-[11px] text-slate-500">
+              {t('Full brightness returns while a session is running.')}
+            </p>
+          </div>
+
+          <div className="border-t border-slate-700 pt-4">
+            <p className="label mb-2">{t('Touch display language')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {DISPLAY_LANGUAGES.map(l => {
+                const active = settingsLang === l.code;
+                return (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => setSettingsLang(l.code)}
+                    className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${
+                      active
+                        ? 'bg-amber-500 text-onaccent border-amber-400'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {t('Applies to the on-device Nextion screen only. The dashboard language is set under Settings.')}
+            </p>
+          </div>
+
           {settingsFlash && (
             <p className="text-xs text-emerald-400">{settingsFlash}</p>
           )}
 
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setSettingsTarget(null)}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={() => setSettingsTarget(null)}>{t('Cancel')}</button>
             <button
               type="button"
               className="btn-primary"
               disabled={settingsBusy}
               onClick={handleSaveSettings}
             >
-              {settingsBusy ? 'Saving…' : 'Apply'}
+              {settingsBusy ? t('Saving…') : t('Apply')}
             </button>
           </div>
         </div>
       </Modal>
 
+      <ConfirmDialog
+        isOpen={!!otaTarget}
+        onClose={() => setOtaTarget(null)}
+        onConfirm={installFirmware}
+        title={t('Install firmware')}
+        confirmLabel={t('Install')}
+        message={t('Install "{file}" on {name}? The device waits until no session is running, then restarts with the new firmware.', {
+          file: fwInfo?.name || 'firmware.bin',
+          name: otaTarget?.label || otaTarget?.hardware_id,
+        })}
+      />
+
       {/* Remote Control — virtual screen mirror + touch injection */}
       <Modal
         isOpen={!!remoteTarget}
         onClose={() => setRemoteTarget(null)}
-        title={`Remote — ${remoteTarget?.label || remoteTarget?.hardware_id || ''}`}
+        title={t('Remote — {name}', { name: remoteTarget?.label || remoteTarget?.hardware_id || '' })}
         size="xl"
       >
         {remoteTarget && (

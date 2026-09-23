@@ -16,6 +16,7 @@
 #include "weather.h"
 #include "news.h"
 #include "settings.h"
+#include "lang.h"
 #include <WiFi.h>
 #include <time.h>
 #include <FastLED.h>
@@ -93,6 +94,22 @@ static Screen   sSleepWakeTo        = SCR_IDLE;
 static bool     sSleepDrawnAsPaused = false;
 static bool     sSleepDrawnFromIdle = false;
 
+// Pomodoro. A focus block is counted in *active* seconds (manual pauses
+// don't use it up); sFocusBaseSec is the elapsed total when the block began.
+// When a block ends the session auto-pauses into a break (sOnBreak); once
+// the break time is over (sBreakOver) the LEDs blink until CONTINUE.
+static uint32_t sFocusBaseSec    = 0;
+static bool     sOnBreak         = false;
+static bool     sBreakOver       = false;
+static uint32_t sBreakEndMs      = 0;
+static uint32_t sLastPomoDrawSec = 0xFFFFFFFF;
+
+// Idle reminder — fires once per idle stretch (reset by any touch) and
+// gives up after REMINDER_SHOW_MS so an empty office isn't lit all night.
+static bool     sReminderShown   = false;
+static uint32_t sReminderSinceMs = 0;
+static const uint32_t REMINDER_SHOW_MS = 2UL * 60UL * 1000UL;
+
 // ---- Settings screen --------------------------------------------------------
 struct ColorPreset { const char* hex; uint16_t rgb565; };
 static const ColorPreset COLOR_PRESETS[] = {
@@ -106,7 +123,7 @@ static const ColorPreset COLOR_PRESETS[] = {
 static const int N_COLOR_PRESETS = 6;
 
 static const uint8_t BRIGHT_LEVELS[]   = {30, 80, 150, 250};
-static const char*   BRIGHT_LABELS[]   = {"Low", "Med", "High", "Max"};
+static const StrId   BRIGHT_LABELS[]   = {S_BRIGHT_LOW, S_BRIGHT_MED, S_BRIGHT_HIGH, S_BRIGHT_MAX};
 static const int     N_BRIGHT_LEVELS   = 4;
 
 // Editor state — set in initSettingsScreen, applied to NVS on Save.
@@ -114,6 +131,10 @@ static int    sTempColorIdx      = 0;
 static int    sTempBrightIdx     = 3;
 static String sSettingsOrigHex;
 static uint8_t sSettingsOrigBri  = LED_BRIGHTNESS;
+// Language is previewed live too (the screen redraws in the new language)
+// and reverted on Cancel / Home just like colour and brightness.
+static Language sTempLang         = LANG_EN;
+static Language sSettingsOrigLang = LANG_EN;
 
 // Discard-confirm context: where to land if the user picks Yes, and where to
 // go back to on No. Set by the caller right before transitioning into
@@ -179,6 +200,40 @@ static uint32_t currentElapsedSec() {
     return sAccumSec + (millis() - sSegmentStartMs) / 1000;
 }
 
+static String fmtMS(uint32_t sec) {
+    char b[12]; snprintf(b, sizeof(b), "%02u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
+    return String(b);
+}
+
+static bool pomodoroOn() { return Settings::pomodoroMin() > 0; }
+
+static uint32_t focusLeftSec() {
+    uint32_t block = (uint32_t)Settings::pomodoroMin() * 60UL;
+    uint32_t used  = currentElapsedSec() - sFocusBaseSec;
+    return used >= block ? 0 : block - used;
+}
+
+static uint32_t breakLeftSec() {
+    int32_t left = (int32_t)(sBreakEndMs - millis());
+    return left > 0 ? ((uint32_t)left + 999) / 1000 : 0;
+}
+
+// Put the LED matrix in the right mode for the current session state:
+// plain stopwatch, pomodoro focus countdown, or break countdown (green).
+static void syncSessionLeds() {
+    CRGB col = rgb565ToCrgb(sSelClientColor);
+    if (sOnBreak) {
+        LedDisplay::countdown(sBreakEndMs, CRGB(0, 200, 60));
+    } else if (pomodoroOn()) {
+        if (sPaused) LedDisplay::holdDuration(focusLeftSec(), col);
+        else         LedDisplay::countdown(millis() + focusLeftSec() * 1000UL, col);
+    } else {
+        if (sPaused) LedDisplay::holdDuration(sAccumSec, col);
+        else         LedDisplay::startStopwatch(sSegmentStartMs - sAccumSec * 1000UL, col);
+    }
+    LedDisplay::setAttention(sOnBreak && sBreakOver);
+}
+
 // ---------------------------------------------------------------------------
 // Drawing — header strip used on every non-idle screen
 // ---------------------------------------------------------------------------
@@ -214,15 +269,24 @@ static bool inHomeButton(const NextionTouch& t, int y) {
     return inRect(t, HOME_X, y, HOME_W, HOME_H);
 }
 
+// Back button in the header strip. 80 px wide so the German "< Zurueck"
+// still fits in FONT_SMALL; hit-tests use the same constants.
+static const int BACK_X = 8, BACK_Y = 6, BACK_W = 80, BACK_H = 28;
+
+static bool inBackButton(const NextionTouch& t) {
+    return inRect(t, BACK_X, BACK_Y, BACK_W, BACK_H);
+}
+
 static void drawHeader(const String& title, bool showBack) {
     Nextion::fillRect(0, 0, DISP_W, 40, COL_PANEL);
     Nextion::drawLine(0, 40, DISP_W, 40, COL_ACCENT);
     if (showBack) {
-        Nextion::fillRect(8, 6, 64, 28, COL_BG);
-        Nextion::drawTextCentered(8, 6, 64, 28, FONT_SMALL, COL_TEXT, COL_BG, "< Back");
+        Nextion::fillRect(BACK_X, BACK_Y, BACK_W, BACK_H, COL_BG);
+        Nextion::drawTextCentered(BACK_X, BACK_Y, BACK_W, BACK_H,
+                                  FONT_SMALL, COL_TEXT, COL_BG, TR(S_BACK));
     }
     // Reserve the right edge for the home button (HOME_W + 8 padding).
-    int titleX = showBack ? 80 : 12;
+    int titleX = showBack ? (BACK_X + BACK_W + 8) : 12;
     int titleW = DISP_W - titleX - (HOME_W + 8);
     Nextion::drawTextSty(titleX, 6, titleW, 28,
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 0, 1, 1, title);
@@ -307,10 +371,10 @@ static void drawIdleWeather() {
         char buf[80];
         // Font is ASCII-only — no degree-sign glyph, so use " C".
         snprintf(buf, sizeof(buf), "%s   %.1f C   %s",
-                 w.city.c_str(), w.tempC, w.condition.c_str());
+                 w.city.c_str(), w.tempC, Lang::weather(w.wmoCode));
         line = buf;
     } else {
-        line = "Weather unavailable";
+        line = TR(S_WEATHER_UNAVAILABLE);
     }
     Nextion::drawTextCentered(20, 48, DISP_W - 40, 36,
                               FONT_MEDIUM, COL_TEXT, COL_PANEL, line);
@@ -324,7 +388,7 @@ static void drawIdleNews() {
         sIdleNewsIdx %= News::count();
         headline = "* " + News::get(sIdleNewsIdx);
     } else {
-        headline = "Loading news...";
+        headline = TR(S_NEWS_LOADING);
     }
     Nextion::drawTextCentered(20, 88, DISP_W - 40, 48,
                               FONT_SMALL, COL_MUTED, COL_BG, headline);
@@ -352,7 +416,7 @@ static void drawIdle() {
     // last few characters don't end up tucked behind the "..." button at
     // HOME_X. HOME_X = DISP_W - 44, so the title bbox stops there.
     Nextion::drawTextCentered(0, 4, HOME_X, 38,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPWATCH");
+                              FONT_LARGE, COL_ACCENT, COL_BG, TR(S_APP_TITLE));
     drawIdleSettingsButton();
 
     drawIdleWeather();
@@ -369,9 +433,9 @@ static void drawIdle() {
     Nextion::drawCircle(btnX + capR,        btnY + capR, capR, COL_ACCENT, true);
     Nextion::drawCircle(btnX + btnW - capR, btnY + capR, capR, COL_ACCENT, true);
     Nextion::drawTextCentered(btnX + capR, btnY, btnW - 2 * capR, btnH,
-                              FONT_LARGE, COL_BLACK, COL_ACCENT, "START");
+                              FONT_LARGE, COL_BLACK, COL_ACCENT, TR(S_START));
 
-    // Footer = today's date, in Slovak DD.MM.YYYY format.
+    // Footer = today's date, DD.MM.YYYY (Slovak and German convention).
     time_t now = time(nullptr);
     struct tm tm_local;
     localtime_r(&now, &tm_local);
@@ -425,16 +489,16 @@ static String breadcrumb(const String& a,
 
 static void drawClientScreen() {
     Nextion::clear(COL_BG);
-    drawHeader("Select client", false);
-    drawList(sClients, sClientCount, "No clients available", sClientOffset);
-    drawFooterHint("Tap a client to continue");
+    drawHeader(TR(S_SELECT_CLIENT), false);
+    drawList(sClients, sClientCount, TR(S_NO_CLIENTS), sClientOffset);
+    drawFooterHint(TR(S_HINT_CLIENT));
 }
 
 static void drawProjectScreen() {
     Nextion::clear(COL_BG);
     drawHeader(breadcrumb(sSelClientName), true);
-    drawList(sProjects, sProjectCount, "No projects for this client", sProjectOffset);
-    drawFooterHint("Tap a project to continue");
+    drawList(sProjects, sProjectCount, TR(S_NO_PROJECTS), sProjectOffset);
+    drawFooterHint(TR(S_HINT_PROJECT));
 }
 
 static void drawCategoryScreen() {
@@ -442,25 +506,36 @@ static void drawCategoryScreen() {
     drawHeader(breadcrumb(sSelClientName, sSelProjectName), true);
     // Render only LIST_VISIBLE_SHORT rows so the "Skip app" button below
     // doesn't overlap the fourth row's text.
-    drawList(sCategories, sCategoryCount, "No apps available", sCategoryOffset,
+    drawList(sCategories, sCategoryCount, TR(S_NO_APPS), sCategoryOffset,
              LIST_VISIBLE_SHORT);
 
     Nextion::fillRect(12, DISP_H - 44, 120, 30, COL_PANEL);
     Nextion::drawTextCentered(12, DISP_H - 44, 120, 30,
-                              FONT_SMALL, COL_TEXT, COL_PANEL, "Skip app");
-    drawFooterHint("Pick a category, or skip the app");
+                              FONT_SMALL, COL_TEXT, COL_PANEL, TR(S_SKIP_APP));
+    drawFooterHint(TR(S_HINT_CATEGORY));
 }
 
 static void drawAppScreen() {
     Nextion::clear(COL_BG);
     drawHeader(breadcrumb(sSelClientName, sSelProjectName, sSelCategory), true);
-    drawList(sCategoryApps, sCategoryAppCount, "No apps in this category", sAppOffset,
+    drawList(sCategoryApps, sCategoryAppCount, TR(S_NO_APPS_IN_CATEGORY), sAppOffset,
              LIST_VISIBLE_SHORT);
 
     Nextion::fillRect(12, DISP_H - 44, 120, 30, COL_PANEL);
     Nextion::drawTextCentered(12, DISP_H - 44, 120, 30,
-                              FONT_SMALL, COL_TEXT, COL_PANEL, "Skip app");
-    drawFooterHint("Pick the app you'll be using");
+                              FONT_SMALL, COL_TEXT, COL_PANEL, TR(S_SKIP_APP));
+    drawFooterHint(TR(S_HINT_APP));
+}
+
+// Pomodoro status in the "Started:" slot, redrawn every second from tick().
+static void drawPomodoroLine() {
+    String   line;
+    uint16_t col = COL_TEXT;
+    if (sOnBreak && sBreakOver) { line = TR(S_BREAK_OVER);                       col = COL_ACCENT; }
+    else if (sOnBreak)          { line = TR(S_BREAK_PREFIX) + fmtMS(breakLeftSec()); col = COL_GREEN;  }
+    else                        { line = TR(S_FOCUS_PREFIX) + fmtMS(focusLeftSec()); }
+    Nextion::fillRect(0, 112, DISP_W, 30, COL_BG);
+    Nextion::drawTextCentered(0, 112, DISP_W, 30, FONT_MEDIUM, col, COL_BG, line);
 }
 
 static void drawRunningScreen() {
@@ -475,7 +550,7 @@ static void drawRunningScreen() {
                          FONT_MEDIUM, COL_TEXT, COL_PANEL, 1, 1, 1,
                          sSelClientName);
 
-    String subtitle = sPaused ? String("PAUSED") : String("RUNNING");
+    String subtitle = TR(sPaused ? S_PAUSED : S_RUNNING);
     if (sSelApp >= 0) subtitle += "   " + sSelAppName;
     Nextion::drawTextSty(8, 30, topTextW, 22,
                          FONT_SMALL,
@@ -492,79 +567,103 @@ static void drawRunningScreen() {
                               FONT_LARGE, projectCol, COL_BG,
                               sSelProjectName);
 
-    // Human-readable start time
-    Nextion::drawTextCentered(0, 112, DISP_W, 30,
-                              FONT_MEDIUM, COL_TEXT, COL_BG,
-                              "Started: " + sStartLocal);
+    // Human-readable start time, or the pomodoro countdown when it's on.
+    if (pomodoroOn() || sOnBreak) {
+        drawPomodoroLine();
+    } else {
+        Nextion::drawTextCentered(0, 112, DISP_W, 30,
+                                  FONT_MEDIUM, COL_TEXT, COL_BG,
+                                  TR(S_STARTED_PREFIX) + sStartLocal);
+    }
 
-    // Pause / Continue button (left). CONTINUE is too long for FONT_LARGE in
-    // the available 170 px width; drop to FONT_MEDIUM so it fits cleanly.
+    // Pause / Continue button (left). CONTINUE / WEITER is too long for
+    // FONT_LARGE in the available 170 px width; drop to FONT_MEDIUM so it
+    // fits cleanly.
     uint16_t pauseBg   = sPaused ? COL_GREEN : COL_GREY;
     uint16_t pauseFg   = sPaused ? COL_BLACK : COL_WHITE;
     uint8_t  pauseFont = sPaused ? FONT_MEDIUM : FONT_LARGE;
     Nextion::fillRect(20, 162, 170, 58, pauseBg);
     Nextion::drawTextCentered(20, 162, 170, 58,
                               pauseFont, pauseFg, pauseBg,
-                              sPaused ? "CONTINUE" : "PAUSE");
+                              TR(sPaused ? S_CONTINUE : S_PAUSE));
 
     // Stop button (right)
     Nextion::fillRect(210, 162, 170, 58, COL_RED);
     Nextion::drawTextCentered(210, 162, 170, 58,
-                              FONT_LARGE, COL_WHITE, COL_RED, "STOP");
+                              FONT_LARGE, COL_WHITE, COL_RED, TR(S_STOP));
 }
 
 static void drawConfirmScreen() {
     Nextion::clear(COL_BG);
-    drawHeader("Save session?", false);
+    drawHeader(TR(S_SAVE_SESSION_Q), false);
 
     Nextion::drawTextCentered(0, 56, DISP_W, 24,
                               FONT_MEDIUM, COL_TEXT, COL_BG,
                               sSelClientName + "  /  " + sSelProjectName);
     Nextion::drawTextCentered(0, 82, DISP_W, 20,
                               FONT_SMALL, COL_MUTED, COL_BG,
-                              sSelApp >= 0 ? sSelAppName : String("(no app)"));
+                              sSelApp >= 0 ? sSelAppName : String(TR(S_NO_APP)));
 
     Nextion::drawTextCentered(0, 114, DISP_W, 30,
                               FONT_MEDIUM, COL_ACCENT, COL_BG,
-                              "Duration: " + fmtHMS(sLastTimerSec));
+                              TR(S_DURATION_PREFIX) + fmtHMS(sLastTimerSec));
 
     Nextion::fillRect(28, 178, 156, 44, COL_PANEL);
     Nextion::drawTextCentered(28, 178, 156, 44,
-                              FONT_MEDIUM, COL_MUTED, COL_PANEL, "Discard");
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL, TR(S_DISCARD));
 
     Nextion::fillRect(DISP_W - 184, 178, 156, 44, COL_GREEN);
     Nextion::drawTextCentered(DISP_W - 184, 178, 156, 44,
-                              FONT_MEDIUM, COL_BLACK, COL_GREEN, "Save");
+                              FONT_MEDIUM, COL_BLACK, COL_GREEN, TR(S_SAVE));
 }
 
 // Settings layout constants — kept here so both draw and hit-test agree.
+// Three rows (colour swatches, brightness, language) plus Save / Cancel
+// have to share the 200 px under the header, so everything is packed
+// fairly tight:
+//   y= 44.. 66  "Clock colour:" label
+//   y= 70..106  6 colour swatches
+//   y=112..134  "Brightness:" label
+//   y=138..168  4 brightness buttons
+//   y=174..200  "Language:" label + 2 language buttons on the same row
+//   y=206..236  Save / Cancel
+static const int SET_COLOR_LBL_Y = 44;
 static const int SET_SWATCH_W   = 54;
-static const int SET_SWATCH_H   = 40;
-static const int SET_SWATCH_Y   = 78;
+static const int SET_SWATCH_H   = 36;
+static const int SET_SWATCH_Y   = 70;
 static const int SET_SWATCH_GAP = 4;
 static const int SET_SWATCH_X0  = 28;       // (400 - (6*54 + 5*4)) / 2
 
+static const int SET_BRIGHT_LBL_Y = 112;
 static const int SET_BRIGHT_W   = 84;
-static const int SET_BRIGHT_H   = 36;
-static const int SET_BRIGHT_Y   = 156;
+static const int SET_BRIGHT_H   = 30;
+static const int SET_BRIGHT_Y   = 138;
 static const int SET_BRIGHT_GAP = 12;
 static const int SET_BRIGHT_X0  = 14;       // (400 - (4*84 + 3*12)) / 2
 
-static const int SET_BTN_Y      = 200;
+// Language row: label on the left, one button per language on the right.
+static const int SET_LANG_Y     = 174;
+static const int SET_LANG_H     = 26;
+static const int SET_LANG_W     = 112;
+static const int SET_LANG_GAP   = 8;
+static const int SET_LANG_X0    = DISP_W - 20 - (LANG_COUNT * SET_LANG_W + (LANG_COUNT - 1) * SET_LANG_GAP);
+
+static const int SET_BTN_Y      = 206;
 static const int SET_BTN_W      = 156;
-static const int SET_BTN_H      = 32;
+static const int SET_BTN_H      = 30;
 
 static int settingsSwatchX(int i) { return SET_SWATCH_X0 + i * (SET_SWATCH_W + SET_SWATCH_GAP); }
 static int settingsBrightX(int i) { return SET_BRIGHT_X0 + i * (SET_BRIGHT_W + SET_BRIGHT_GAP); }
+static int settingsLangX(int i)   { return SET_LANG_X0   + i * (SET_LANG_W   + SET_LANG_GAP); }
 
 static void drawSettingsScreen() {
     Nextion::clear(COL_BG);
-    drawHeader("Settings", false);  // home button is at right edge
+    drawHeader(TR(S_SETTINGS), false);  // home button is at right edge
 
     // ---- Clock colour row ----
-    Nextion::drawTextSty(20, 50, 360, 24,
+    Nextion::drawTextSty(20, SET_COLOR_LBL_Y, 360, 22,
                          FONT_MEDIUM, COL_TEXT, COL_BG, 0, 1, 1,
-                         "Clock colour:");
+                         TR(S_CLOCK_COLOUR));
     for (int i = 0; i < N_COLOR_PRESETS; i++) {
         int x = settingsSwatchX(i);
         Nextion::fillRect(x, SET_SWATCH_Y, SET_SWATCH_W, SET_SWATCH_H,
@@ -577,9 +676,9 @@ static void drawSettingsScreen() {
     }
 
     // ---- Brightness row ----
-    Nextion::drawTextSty(20, 128, 360, 24,
+    Nextion::drawTextSty(20, SET_BRIGHT_LBL_Y, 360, 22,
                          FONT_MEDIUM, COL_TEXT, COL_BG, 0, 1, 1,
-                         "Brightness:");
+                         TR(S_BRIGHTNESS));
     for (int i = 0; i < N_BRIGHT_LEVELS; i++) {
         int      x   = settingsBrightX(i);
         bool     on  = (sTempBrightIdx == i);
@@ -587,23 +686,39 @@ static void drawSettingsScreen() {
         uint16_t fg  = on ? COL_BLACK  : COL_TEXT;
         Nextion::fillRect(x, SET_BRIGHT_Y, SET_BRIGHT_W, SET_BRIGHT_H, bg);
         Nextion::drawTextCentered(x, SET_BRIGHT_Y, SET_BRIGHT_W, SET_BRIGHT_H,
-                                  FONT_MEDIUM, fg, bg, BRIGHT_LABELS[i]);
+                                  FONT_MEDIUM, fg, bg, TR(BRIGHT_LABELS[i]));
+    }
+
+    // ---- Language row ---- (label + buttons share one line)
+    Nextion::drawTextSty(20, SET_LANG_Y, SET_LANG_X0 - 24, SET_LANG_H,
+                         FONT_MEDIUM, COL_TEXT, COL_BG, 0, 1, 1,
+                         TR(S_LANGUAGE));
+    for (int i = 0; i < LANG_COUNT; i++) {
+        int      x   = settingsLangX(i);
+        bool     on  = (sTempLang == (Language)i);
+        uint16_t bg  = on ? COL_ACCENT : COL_PANEL;
+        uint16_t fg  = on ? COL_BLACK  : COL_TEXT;
+        Nextion::fillRect(x, SET_LANG_Y, SET_LANG_W, SET_LANG_H, bg);
+        Nextion::drawTextCentered(x, SET_LANG_Y, SET_LANG_W, SET_LANG_H,
+                                  FONT_MEDIUM, fg, bg, Lang::name((Language)i));
     }
 
     // ---- Save / Cancel ----
     Nextion::fillRect(28, SET_BTN_Y, SET_BTN_W, SET_BTN_H, COL_GREEN);
     Nextion::drawTextCentered(28, SET_BTN_Y, SET_BTN_W, SET_BTN_H,
-                              FONT_MEDIUM, COL_BLACK, COL_GREEN, "Save");
+                              FONT_MEDIUM, COL_BLACK, COL_GREEN, TR(S_SAVE));
 
     int cancelX = DISP_W - SET_BTN_W - 28;
     Nextion::fillRect(cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H, COL_PANEL);
     Nextion::drawTextCentered(cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H,
-                              FONT_MEDIUM, COL_MUTED, COL_PANEL, "Cancel");
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL, TR(S_CANCEL));
 }
 
 static void initSettingsScreen() {
-    sSettingsOrigHex = Settings::clockColorHex();
-    sSettingsOrigBri = Settings::brightness();
+    sSettingsOrigHex  = Settings::clockColorHex();
+    sSettingsOrigBri  = Settings::brightness();
+    sSettingsOrigLang = Settings::language();
+    sTempLang         = sSettingsOrigLang;
 
     sTempColorIdx = 0;
     for (int i = 0; i < N_COLOR_PRESETS; i++) {
@@ -618,12 +733,18 @@ static void initSettingsScreen() {
     }
 }
 
+// Undo every live preview (LEDs + language) so leaving without Save puts
+// the device back exactly where it was.
+static void revertSettingsPreview() {
+    LedDisplay::setClockColorHex(sSettingsOrigHex);
+    LedDisplay::setBrightness(sSettingsOrigBri);
+    Lang::set(sSettingsOrigLang);
+}
+
 static void onTouchSettings(const NextionTouch& t) {
     // Home in header → cancel and exit.
     if (inHomeButton(t, 4)) {
-        // Restore preview to the originals before leaving.
-        LedDisplay::setClockColorHex(sSettingsOrigHex);
-        LedDisplay::setBrightness(sSettingsOrigBri);
+        revertSettingsPreview();
         goTo(SCR_IDLE);
         return;
     }
@@ -648,18 +769,28 @@ static void onTouchSettings(const NextionTouch& t) {
             return;
         }
     }
+    // Language — live preview: the settings screen itself redraws in the
+    // chosen language so the user sees the effect before committing.
+    for (int i = 0; i < LANG_COUNT; i++) {
+        if (inRect(t, settingsLangX(i), SET_LANG_Y, SET_LANG_W, SET_LANG_H)) {
+            sTempLang = (Language)i;
+            Lang::set(sTempLang);
+            sDirty = true;
+            return;
+        }
+    }
     // Save
     if (inRect(t, 28, SET_BTN_Y, SET_BTN_W, SET_BTN_H)) {
         Settings::setClockColorHex(COLOR_PRESETS[sTempColorIdx].hex);
         Settings::setBrightness   (BRIGHT_LEVELS[sTempBrightIdx]);
-        toast("Saved", 900, SCR_IDLE);
+        Settings::setLanguage     (sTempLang);
+        toast(TR(S_TOAST_SAVED), 900, SCR_IDLE);
         return;
     }
     // Cancel
     int cancelX = DISP_W - SET_BTN_W - 28;
     if (inRect(t, cancelX, SET_BTN_Y, SET_BTN_W, SET_BTN_H)) {
-        LedDisplay::setClockColorHex(sSettingsOrigHex);
-        LedDisplay::setBrightness(sSettingsOrigBri);
+        revertSettingsPreview();
         goTo(SCR_IDLE);
         return;
     }
@@ -770,14 +901,14 @@ static void drawDiscardConfirmScreen() {
 
     Nextion::drawTextCentered(20, 44, DISP_W - 40, 36,
                               FONT_LARGE, COL_TEXT, COL_PANEL,
-                              "Discard session?");
+                              TR(S_DISCARD_SESSION_Q));
     Nextion::drawTextCentered(20, 88, DISP_W - 40, 26,
                               FONT_MEDIUM, COL_MUTED, COL_PANEL,
-                              "All elapsed time will be lost.");
+                              TR(S_TIME_WILL_BE_LOST));
     // Show how much they'd be losing.
     Nextion::drawTextCentered(20, 118, DISP_W - 40, 28,
                               FONT_MEDIUM, COL_ACCENT, COL_PANEL,
-                              "Tracked: " + fmtHMS(
+                              TR(S_TRACKED_PREFIX) + fmtHMS(
                                   sDiscardKind == DISCARD_FROM_RUNNING
                                       ? currentElapsedSec()
                                       : sLastTimerSec));
@@ -785,12 +916,28 @@ static void drawDiscardConfirmScreen() {
     // No, keep — left, safe
     Nextion::fillRect(28, 178, 160, 50, COL_BLUE);
     Nextion::drawTextCentered(28, 178, 160, 50,
-                              FONT_MEDIUM, COL_WHITE, COL_BLUE, "No, keep");
+                              FONT_MEDIUM, COL_WHITE, COL_BLUE, TR(S_NO_KEEP));
 
     // Yes, discard — right, destructive
     Nextion::fillRect(DISP_W - 188, 178, 160, 50, COL_RED);
     Nextion::drawTextCentered(DISP_W - 188, 178, 160, 50,
-                              FONT_MEDIUM, COL_WHITE, COL_RED, "Yes, discard");
+                              FONT_MEDIUM, COL_WHITE, COL_RED, TR(S_YES_DISCARD));
+}
+
+static const int REM_BTN_Y = 170, REM_BTN_W = 160, REM_BTN_H = 50;
+
+static void drawReminderScreen() {
+    Nextion::clear(COL_BG);
+    Nextion::drawTextCentered(0, 40, DISP_W, 44,
+                              FONT_LARGE, COL_ACCENT, COL_BG, TR(S_REMINDER_TITLE));
+    Nextion::drawTextCentered(0, 96, DISP_W, 30,
+                              FONT_MEDIUM, COL_MUTED, COL_BG, TR(S_REMINDER_BODY));
+    Nextion::fillRect(28, REM_BTN_Y, REM_BTN_W, REM_BTN_H, COL_PANEL);
+    Nextion::drawTextCentered(28, REM_BTN_Y, REM_BTN_W, REM_BTN_H,
+                              FONT_MEDIUM, COL_MUTED, COL_PANEL, TR(S_DISMISS));
+    Nextion::fillRect(DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H, COL_ACCENT);
+    Nextion::drawTextCentered(DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H,
+                              FONT_LARGE, COL_BLACK, COL_ACCENT, TR(S_START));
 }
 
 // ---------------------------------------------------------------------------
@@ -829,9 +976,9 @@ static void onTouchDiscardConfirm(const NextionTouch& t) {
     if (inRect(t, DISP_W - 188, 178, 160, 50)) {
         LedDisplay::clockMode();
         if (sDiscardKind == DISCARD_FROM_RUNNING) {
-            toast("Discarded", 1200, SCR_IDLE);
+            toast(TR(S_TOAST_DISCARDED), 1200, SCR_IDLE);
         } else {
-            toast("Discarded", 1200, SCR_APP);
+            toast(TR(S_TOAST_DISCARDED), 1200, SCR_APP);
         }
         return;
     }
@@ -840,6 +987,13 @@ static void onTouchDiscardConfirm(const NextionTouch& t) {
 static void onScrollHit(int hit, int count, int& offset, int visibleN = LIST_VISIBLE) {
     if (hit == -2 && offset > 0) { offset--; sDirty = true; }
     if (hit == -3 && offset + visibleN < count) { offset++; sDirty = true; }
+}
+
+static void startPicker() {
+    goTo(SCR_CLIENT);
+    sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
+    sClientOffset = 0;
+    sDirty = true;
 }
 
 static void onTouchIdle(const NextionTouch& t) {
@@ -857,10 +1011,16 @@ static void onTouchIdle(const NextionTouch& t) {
         return;
     }
     // Anywhere else → start the selection workflow.
-    goTo(SCR_CLIENT);
-    sClientCount  = Api::fetchClients(sClients, MAX_ENTITIES);
-    sClientOffset = 0;
-    sDirty = true;
+    startPicker();
+}
+
+static void onTouchReminder(const NextionTouch& t) {
+    LedDisplay::setAttention(false);
+    if (inRect(t, DISP_W - 28 - REM_BTN_W, REM_BTN_Y, REM_BTN_W, REM_BTN_H)) {
+        startPicker();
+    } else {
+        goTo(SCR_IDLE);   // Dismiss, or a tap anywhere else
+    }
 }
 
 // Forward-declared so the category/app touch handlers can call it before
@@ -883,7 +1043,7 @@ static void onTouchClient(const NextionTouch& t) {
 
 static void onTouchProject(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CLIENT); return; }  // back keeps sClientOffset
+    if (inBackButton(t)) { goTo(SCR_CLIENT); return; }  // back keeps sClientOffset
     int hit = listHit(t, sProjectCount, sProjectOffset);
     if (hit < 0) { onScrollHit(hit, sProjectCount, sProjectOffset); return; }
     Entity& p = sProjects[hit];
@@ -903,7 +1063,7 @@ static void onTouchProject(const NextionTouch& t) {
 
 static void onTouchCategory(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_PROJECT); return; }
+    if (inBackButton(t)) { goTo(SCR_PROJECT); return; }
     // "Skip app" — bottom-left button at the same coords as on SCR_APP.
     if (inRect(t, 12, DISP_H - 44, 120, 30)) {
         startSession(-1, "");
@@ -927,14 +1087,17 @@ static void startSession(int appId, const String& appName) {
     sSegmentStartMs = millis();
     sAccumSec       = 0;
     sPaused         = false;
-    LedDisplay::startStopwatch(sStartMs, rgb565ToCrgb(sSelClientColor));
+    sFocusBaseSec   = 0;
+    sOnBreak        = false;
+    sBreakOver      = false;
+    syncSessionLeds();
     goTo(SCR_RUNNING);
 }
 
 static void onTouchApp(const NextionTouch& t) {
     if (inHomeButton(t, 4)) { goHome(); return; }
-    if (inRect(t, 8, 6, 64, 28)) { goTo(SCR_CATEGORY); return; }   // back to categories
-    if (inRect(t, 12, DISP_H - 44, 120, 30)) { startSession(-1, "(no app)"); return; }
+    if (inBackButton(t)) { goTo(SCR_CATEGORY); return; }   // back to categories
+    if (inRect(t, 12, DISP_H - 44, 120, 30)) { startSession(-1, ""); return; }
     int hit = listHit(t, sCategoryAppCount, sAppOffset, LIST_VISIBLE_SHORT);
     if (hit < 0) { onScrollHit(hit, sCategoryAppCount, sAppOffset, LIST_VISIBLE_SHORT); return; }
     Entity& a = sCategoryApps[hit];
@@ -942,20 +1105,22 @@ static void onTouchApp(const NextionTouch& t) {
 }
 
 static void togglePause() {
-    CRGB col = rgb565ToCrgb(sSelClientColor);
     if (sPaused) {
-        // Resume: start a new active segment. Tell the LED display the start
-        // time it should pretend the stopwatch began, so the displayed total
-        // continues smoothly.
+        // Resume: start a new active segment. CONTINUE during or after a
+        // pomodoro break also starts a fresh focus block.
         sSegmentStartMs = millis();
         sPaused = false;
-        LedDisplay::startStopwatch(millis() - sAccumSec * 1000UL, col);
+        if (sOnBreak) {
+            sOnBreak      = false;
+            sBreakOver    = false;
+            sFocusBaseSec = sAccumSec;
+        }
     } else {
         // Pause: bank the current segment, freeze LED matrix.
         sAccumSec += (millis() - sSegmentStartMs) / 1000;
         sPaused = true;
-        LedDisplay::holdDuration(sAccumSec, col);
     }
+    syncSessionLeds();
 }
 
 static void onTouchRunning(const NextionTouch& t) {
@@ -985,10 +1150,19 @@ static void onTouchConfirm(const NextionTouch& t) {
         return;
     }
     if (inRect(t, DISP_W - 184, 178, 156, 44)) {  // Save
-        bool ok = Api::postTimelog(sSelClient, sSelProject, sSelApp,
-                                   sStartIso, sLastTimerSec);
+        int code = Api::postTimelog(sSelClient, sSelProject, sSelApp,
+                                    sStartIso, sLastTimerSec);
+        StrId msg = S_TOAST_SAVED_BANG;
+        if (code < 200 || code >= 300) {
+            // Server unreachable → keep the session on the device and retry
+            // later. A 4xx is a real rejection, so tell the user.
+            bool queued = Api::isRetryable(code) &&
+                          Api::queueTimelog(sSelClient, sSelProject, sSelApp,
+                                            sStartIso, sLastTimerSec);
+            msg = queued ? S_TOAST_SAVED_OFFLINE : S_TOAST_SAVE_FAILED;
+        }
         LedDisplay::clockMode();
-        toast(ok ? "Saved!" : "Save failed");
+        toast(TR(msg));
     }
 }
 
@@ -998,7 +1172,7 @@ static void onTouchConfirm(const NextionTouch& t) {
 void showBootMessage(const String& msg) {
     Nextion::clear(COL_BG);
     Nextion::drawTextCentered(0, 80, DISP_W, 40,
-                              FONT_LARGE, COL_ACCENT, COL_BG, "LIXIE STOPWATCH");
+                              FONT_LARGE, COL_ACCENT, COL_BG, TR(S_APP_TITLE));
     Nextion::drawTextCentered(0, 130, DISP_W, 30,
                               FONT_MEDIUM, COL_MUTED, COL_BG, msg);
     sScreen = SCR_BOOT;
@@ -1012,6 +1186,73 @@ void goTo(Screen s) {
 }
 
 Screen current() { return sScreen; }
+
+bool sessionActive() {
+    switch (sScreen) {
+        case SCR_RUNNING:
+        case SCR_CONFIRM:
+        case SCR_DISCARD_CONFIRM:
+            return true;
+        case SCR_SLEEP:
+            return sSleepWakeTo == SCR_RUNNING;
+        default:
+            return false;
+    }
+}
+
+// Pomodoro transitions + the once-a-second status line.
+static void tickPomodoro() {
+    bool inSession = sScreen == SCR_RUNNING ||
+                     (sScreen == SCR_SLEEP && sSleepWakeTo == SCR_RUNNING);
+    if (!inSession || (!pomodoroOn() && !sOnBreak)) return;
+
+    if (pomodoroOn() && !sPaused && !sOnBreak && focusLeftSec() == 0) {
+        // Focus block done → auto-pause into a break.
+        sAccumSec += (millis() - sSegmentStartMs) / 1000;
+        sPaused     = true;
+        sOnBreak    = true;
+        sBreakOver  = false;
+        sBreakEndMs = millis() + (uint32_t)Settings::breakMin() * 60000UL;
+        syncSessionLeds();
+        if (sScreen == SCR_SLEEP) wakeFromSleep(); else sDirty = true;
+        return;
+    }
+    if (sOnBreak && !sBreakOver && breakLeftSec() == 0) {
+        sBreakOver = true;
+        syncSessionLeds();
+        if (sScreen == SCR_SLEEP) wakeFromSleep(); else sDirty = true;
+        return;
+    }
+    if (sScreen == SCR_RUNNING && !sDirty) {
+        uint32_t s = millis() / 1000;
+        if (s != sLastPomoDrawSec) {
+            sLastPomoDrawSec = s;
+            drawPomodoroLine();
+        }
+    }
+}
+
+static void tickReminder() {
+    if (sScreen == SCR_REMINDER) {
+        if (millis() - sReminderSinceMs >= REMINDER_SHOW_MS) {
+            LedDisplay::setAttention(false);
+            goTo(SCR_IDLE);
+        }
+        return;
+    }
+    uint16_t mins = Settings::reminderMin();
+    bool idleStretch = sScreen == SCR_IDLE ||
+                       (sScreen == SCR_SLEEP && sSleepWakeTo == SCR_IDLE);
+    if (mins == 0 || sReminderShown || !idleStretch) return;
+    if (millis() - sLastTouchMs < (uint32_t)mins * 60000UL) return;
+    if (Settings::isNightNow()) return;   // no blinking clock at 3 am
+    sReminderShown   = true;
+    sReminderSinceMs = millis();
+    LedDisplay::setAttention(true);
+    goTo(SCR_REMINDER);
+}
+
+void redraw() { sDirty = true; }
 
 void toast(const String& message, uint16_t ms, Screen nextScreen) {
     sToastMsg   = message;
@@ -1035,6 +1276,9 @@ void tick() {
         (millis() - sLastTouchMs) >= (uint32_t)sleepSec * 1000UL) {
         enterSleep();
     }
+
+    tickPomodoro();
+    tickReminder();
 
     // While the sleep view is up, swap the icon if running ↔ paused state
     // flipped underneath us (e.g. a dashboard-driven pause/continue).
@@ -1060,6 +1304,7 @@ void tick() {
             case SCR_SETTINGS:        drawSettingsScreen();       break;
             case SCR_TOAST:           drawToastScreen();          break;
             case SCR_SLEEP:           drawSleepScreen();          break;
+            case SCR_REMINDER:        drawReminderScreen();       break;
         }
         sDirty = false;
     }
@@ -1083,7 +1328,8 @@ void tick() {
 
 void handleTouch(const NextionTouch& t) {
     if (!t.pressed) return;  // act on press, ignore release
-    sLastTouchMs = millis();
+    sLastTouchMs   = millis();
+    sReminderShown = false;
     switch (sScreen) {
         case SCR_IDLE:            onTouchIdle(t);           break;
         case SCR_CLIENT:          onTouchClient(t);         break;
@@ -1095,6 +1341,7 @@ void handleTouch(const NextionTouch& t) {
         case SCR_DISCARD_CONFIRM: onTouchDiscardConfirm(t); break;
         case SCR_SETTINGS:        onTouchSettings(t);       break;
         case SCR_SLEEP:           onTouchSleep(t);          break;
+        case SCR_REMINDER:        onTouchReminder(t);       break;
         default: break;
     }
 }
@@ -1126,6 +1373,7 @@ LiveSnapshot getLiveSnapshot() {
         case SCR_SETTINGS:        s.state = "idle";       s.screen = "settings";        break;
         case SCR_TOAST:           s.state = "idle";       s.screen = "toast";           break;
         case SCR_BOOT:            s.state = "boot";       s.screen = "boot";            break;
+        case SCR_REMINDER:        s.state = "idle";       s.screen = "reminder";        break;
         case SCR_SLEEP:
             // Report the underlying activity so the dashboard's "live" view
             // still reads "running" / "paused" / "idle" — only the on-device
@@ -1169,7 +1417,7 @@ void writeStateExtras(JsonDocument& doc) {
             JsonObject wo = doc["weather"].to<JsonObject>();
             wo["city"]      = w.city;
             wo["temp_c"]    = w.tempC;
-            wo["condition"] = w.condition;
+            wo["condition"] = Lang::weather(w.wmoCode);
         }
         if (News::count() > 0) {
             int idx = sIdleNewsIdx % News::count();
@@ -1210,6 +1458,10 @@ void writeStateExtras(JsonDocument& doc) {
     }
     else if (sScreen == SCR_TOAST) {
         doc["toast_message"] = sToastMsg;
+    }
+    else if (sScreen == SCR_RUNNING && (pomodoroOn() || sOnBreak)) {
+        doc["pomo_phase"] = sOnBreak ? (sBreakOver ? "break_over" : "break") : "focus";
+        doc["pomo_left"]  = sOnBreak ? breakLeftSec() : focusLeftSec();
     }
 }
 

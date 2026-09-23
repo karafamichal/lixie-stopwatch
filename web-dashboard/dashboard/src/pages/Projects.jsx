@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, CheckCircle, Receipt } from 'lucide-react';
+import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, CheckCircle, Receipt, Printer } from 'lucide-react';
 import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
+import { t, fmtMoney, locale } from '../i18n';
+import BudgetMeter from '../components/BudgetMeter';
 
-const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null };
+const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null, budget_hours: '' };
 
 function fmtDuration(s) {
   const h = Math.floor(s / 3600);
@@ -59,7 +61,7 @@ export default function Projects() {
     setEditTarget(null); setError(''); setModalOpen(true);
   };
   const openEdit = (p) => {
-    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null });
+    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null, budget_hours: p.budget_hours ?? '' });
     setEditTarget(p); setError(''); setModalOpen(true);
   };
 
@@ -69,7 +71,7 @@ export default function Projects() {
       if (editTarget) { await api.projects.update(editTarget.id, form); }
       else            { await api.projects.create(form); }
       setModalOpen(false); load();
-    } catch (err) { setError(err.response?.data?.error || 'Something went wrong'); }
+    } catch (err) { setError(err.response?.data?.error || t('Something went wrong')); }
   };
 
   const handleDelete = async () => { await api.projects.remove(deleteTarget.id); setDeleteTarget(null); load(); };
@@ -105,44 +107,44 @@ export default function Projects() {
     <div className="flex justify-end gap-1">
       {p.completed ? (
         <>
-          <button className="icon-btn" title="View billing" onClick={() => openBilling(p)}>
+          <button className="icon-btn" title={t('View billing')} onClick={() => openBilling(p)}>
             <Receipt className="w-4 h-4 text-amber-400" />
           </button>
           <button
             className="icon-btn text-xs px-2 py-1 h-auto"
-            title="Reopen project"
+            title={t('Reopen project')}
             onClick={() => handleReopen(p)}
           >
-            Reopen
+            {t('Reopen')}
           </button>
         </>
       ) : (
         <>
-          <button className="icon-btn" title={p.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(p)}>
+          <button className="icon-btn" title={p.active ? t('Deactivate') : t('Activate')} onClick={() => toggleActive(p)}>
             {p.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
           </button>
-          <button className="icon-btn" title="Mark as completed" onClick={() => openBilling(p)}>
+          <button className="icon-btn" title={t('Mark as completed')} onClick={() => openBilling(p)}>
             <CheckCircle className="w-4 h-4" />
           </button>
         </>
       )}
-      <button className="icon-btn" title="Edit" onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></button>
-      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(p)}><Trash2 className="w-4 h-4" /></button>
+      <button className="icon-btn" title={t('Edit')} onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></button>
+      <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(p)}><Trash2 className="w-4 h-4" /></button>
     </div>
   );
 
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">Projects</h1>
+        <h1 className="page-title">{t('Projects')}</h1>
         <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Project
+          <Plus className="w-4 h-4" /> {t('Add Project')}
         </button>
       </div>
 
       <div className="mb-4">
         <select className="input sm:w-52" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
-          <option value="">All Clients</option>
+          <option value="">{t('All Clients')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
@@ -153,18 +155,19 @@ export default function Projects() {
           <thead>
             <tr className="bg-slate-800/60">
               <th className="p-0 w-[5px]" />
-              <th className="th">Project</th>
-              <th className="th">Client</th>
-              <th className="th">Status</th>
-              <th className="th">Created</th>
-              <th className="th text-right">Actions</th>
+              <th className="th">{t('Project')}</th>
+              <th className="th">{t('Client')}</th>
+              <th className="th">{t('Status')}</th>
+              <th className="th">{t('Budget')}</th>
+              <th className="th">{t('Created')}</th>
+              <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="td text-center text-slate-500 py-10">Loading…</td></tr>
+              <tr><td colSpan={8} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : projects.length === 0 ? (
-              <tr><td colSpan={7} className="td text-center text-slate-500 py-10">No projects found.</td></tr>
+              <tr><td colSpan={8} className="td text-center text-slate-500 py-10">{t('No projects found.')}</td></tr>
             ) : projects.map(p => (
               <tr key={p.id} className={`tr ${p.completed ? 'opacity-60' : ''}`}>
                 <td className="p-0" style={{ width: 5, backgroundColor: p.color || '#FF8000' }} />
@@ -186,18 +189,21 @@ export default function Projects() {
                 <td className="td">
                   {p.completed ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/60 text-emerald-400 border border-emerald-700/40">
-                      <CheckCircle className="w-3 h-3" /> Completed
+                      <CheckCircle className="w-3 h-3" /> {t('Completed')}
                     </span>
                   ) : (
                     <span className={p.active ? 'badge-active' : 'badge-inactive'}>
-                      {p.active ? 'Active' : 'Inactive'}
+                      {p.active ? t('Active') : t('Inactive')}
                     </span>
                   )}
                 </td>
+                <td className="td w-52">
+                  {p.budget_hours ? <BudgetMeter project={p} /> : <span className="text-xs text-slate-600">–</span>}
+                </td>
                 <td className="td text-sm text-slate-500">
                   {p.completed && p.completed_at
-                    ? new Date(p.completed_at).toLocaleDateString()
-                    : new Date(p.created_at).toLocaleDateString()}
+                    ? new Date(p.completed_at).toLocaleDateString(locale())
+                    : new Date(p.created_at).toLocaleDateString(locale())}
                 </td>
                 <td className="td">{renderActions(p)}</td>
               </tr>
@@ -209,9 +215,9 @@ export default function Projects() {
       {/* Mobile: card list */}
       <div className="md:hidden space-y-3">
         {loading ? (
-          <p className="text-center text-slate-500 py-10">Loading…</p>
+          <p className="text-center text-slate-500 py-10">{t('Loading…')}</p>
         ) : projects.length === 0 ? (
-          <p className="text-center text-slate-500 py-10">No projects found.</p>
+          <p className="text-center text-slate-500 py-10">{t('No projects found.')}</p>
         ) : projects.map(p => (
           <div
             key={p.id}
@@ -232,15 +238,18 @@ export default function Projects() {
               <div className="flex-shrink-0">
                 {p.completed ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/60 text-emerald-400 border border-emerald-700/40">
-                    <CheckCircle className="w-3 h-3" /> Done
+                    <CheckCircle className="w-3 h-3" /> {t('Done')}
                   </span>
                 ) : (
                   <span className={p.active ? 'badge-active' : 'badge-inactive'}>
-                    {p.active ? 'Active' : 'Inactive'}
+                    {p.active ? t('Active') : t('Inactive')}
                   </span>
                 )}
               </div>
             </div>
+            {p.budget_hours ? (
+              <div className="px-3 sm:px-4 pb-3"><BudgetMeter project={p} /></div>
+            ) : null}
             <div className="px-2 sm:px-3 pb-2 border-t border-slate-700/60 pt-2">
               {renderActions(p)}
             </div>
@@ -249,35 +258,41 @@ export default function Projects() {
       </div>
 
       {/* Edit / Create modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Edit Project' : 'Add Project'} size="lg">
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? t('Edit Project') : t('Add Project')} size="lg">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="label">Client</label>
+            <label className="label">{t('Client')}</label>
             <select className="input" required value={form.client_id}
               onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))}>
-              <option value="">Select a client…</option>
+              <option value="">{t('Select a client…')}</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="label">Project Name</label>
-            <input className="input" type="text" required placeholder="e.g. Website Redesign"
+            <label className="label">{t('Project Name')}</label>
+            <input className="input" type="text" required placeholder={t('e.g. Website Redesign')}
               value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </div>
           <div>
-            <label className="label">Colour</label>
+            <label className="label" htmlFor="budget">{t('Budget (hours)')} <span className="text-slate-500 font-normal">{t('(optional)')}</span></label>
+            <input id="budget" className="input w-36" type="number" min="0" step="0.5" placeholder="40"
+              value={form.budget_hours} onChange={e => setForm(p => ({ ...p, budget_hours: e.target.value }))} />
+            <p className="hint">{t('The homepage warns when a project has used 80 % of its budget.')}</p>
+          </div>
+          <div>
+            <label className="label">{t('Colour')}</label>
             <ColorPicker value={form.color} onChange={c => setForm(p => ({ ...p, color: c }))} />
           </div>
           <ImageUpload value={form.logo} onChange={v => setForm(p => ({ ...p, logo: v }))} />
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={form.active}
               onChange={e => setForm(p => ({ ...p, active: e.target.checked }))} />
-            <span className="text-sm text-slate-300">Active (visible on device)</span>
+            <span className="text-sm text-slate-300">{t('Active (visible on device)')}</span>
           </label>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>Cancel</button>
-            <button type="submit" className="btn-primary">{editTarget ? 'Save Changes' : 'Add Project'}</button>
+            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>{t('Cancel')}</button>
+            <button type="submit" className="btn-primary">{editTarget ? t('Save Changes') : t('Add Project')}</button>
           </div>
         </form>
       </Modal>
@@ -286,26 +301,26 @@ export default function Projects() {
       <Modal
         isOpen={billingOpen}
         onClose={() => setBillingOpen(false)}
-        title={billingTarget?.completed ? `Billing — ${billingTarget?.name}` : `Complete Project — ${billingTarget?.name}`}
+        title={billingTarget?.completed ? t('Billing — {name}', { name: billingTarget?.name }) : t('Complete Project — {name}', { name: billingTarget?.name })}
         size="lg"
       >
         {billingLoading ? (
-          <p className="text-slate-400 text-sm py-6 text-center">Calculating…</p>
+          <p className="text-slate-400 text-sm py-6 text-center">{t('Calculating…')}</p>
         ) : billingData?.error ? (
-          <p className="text-red-400 text-sm py-4">Failed to load billing data.</p>
+          <p className="text-red-400 text-sm py-4">{t('Failed to load billing data.')}</p>
         ) : billingData ? (
           <div className="space-y-4">
             {billingData.breakdown.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-4">No time logs recorded for this project yet.</p>
+              <p className="text-slate-500 text-sm text-center py-4">{t('No time logs recorded for this project yet.')}</p>
             ) : (
               <div className="overflow-x-auto -mx-1">
                 <table className="w-full text-sm min-w-[420px]">
                   <thead>
                     <tr className="border-b border-slate-700">
-                      <th className="text-left py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">App</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Hours</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Rate</th>
-                      <th className="text-right py-2 text-xs text-slate-400 font-semibold uppercase tracking-wider">Earned</th>
+                      <th className="text-left py-2 text-xs text-slate-400 font-medium">{t('App')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Hours')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Rate')}</th>
+                      <th className="text-right py-2 text-xs text-slate-400 font-medium">{t('Earned')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -317,14 +332,14 @@ export default function Projects() {
                             <span className="text-slate-200 truncate">{row.app_name}</span>
                           </div>
                         </td>
-                        <td className="py-2.5 text-right font-mono text-slate-400 whitespace-nowrap pl-2">
+                        <td className="py-2.5 text-right tabular-nums text-slate-400 whitespace-nowrap pl-2">
                           {fmtDuration(row.seconds)}
                         </td>
-                        <td className="py-2.5 text-right font-mono text-slate-500 whitespace-nowrap pl-2">
-                          {row.hourly_rate != null ? `€${row.hourly_rate}/h` : '–'}
+                        <td className="py-2.5 text-right tabular-nums text-slate-500 whitespace-nowrap pl-2">
+                          {row.hourly_rate != null ? `${fmtMoney(row.hourly_rate)}/h` : '–'}
                         </td>
-                        <td className="py-2.5 text-right font-mono text-amber-400 font-semibold whitespace-nowrap pl-2">
-                          {row.earnings > 0 ? `€${row.earnings.toFixed(2)}` : '–'}
+                        <td className="py-2.5 text-right tabular-nums text-amber-400 font-semibold whitespace-nowrap pl-2">
+                          {row.earnings > 0 ? fmtMoney(row.earnings) : '–'}
                         </td>
                       </tr>
                     ))}
@@ -335,22 +350,25 @@ export default function Projects() {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-600 gap-3">
               <div className="min-w-0">
-                <p className="text-xs text-slate-500">Total time tracked</p>
+                <p className="text-xs text-slate-500">{t('Total time tracked')}</p>
                 <p className="text-base sm:text-lg font-bold text-slate-200 font-mono">{fmtDuration(billingData.total_seconds)}</p>
               </div>
               <div className="text-right min-w-0">
-                <p className="text-xs text-slate-500">Total earnings</p>
-                <p className="text-xl sm:text-2xl font-bold text-amber-400">€{billingData.total_earnings.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">{t('Total earnings')}</p>
+                <p className="text-xl sm:text-2xl font-bold text-amber-400">{fmtMoney(billingData.total_earnings)}</p>
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-1">
+            <div className="flex flex-wrap justify-end gap-3 pt-1">
+              <a className="btn-secondary mr-auto" href={`/statement/${billingTarget?.id}`} target="_blank" rel="noopener">
+                <Printer className="w-4 h-4" /> {t('Billing statement')}
+              </a>
               <button type="button" className="btn-ghost" onClick={() => setBillingOpen(false)}>
-                {billingTarget?.completed ? 'Close' : 'Cancel'}
+                {billingTarget?.completed ? t('Close') : t('Cancel')}
               </button>
               {!billingTarget?.completed && (
                 <button type="button" className="btn-primary" onClick={handleComplete}>
-                  <CheckCircle className="w-4 h-4" /> Mark as Completed
+                  <CheckCircle className="w-4 h-4" /> {t('Mark as Completed')}
                 </button>
               )}
             </div>
@@ -360,8 +378,8 @@ export default function Projects() {
 
       <ConfirmDialog
         isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete}
-        title="Delete Project"
-        message={`Delete "${deleteTarget?.name}"? All associated time logs will also be deleted.`}
+        title={t('Delete Project')}
+        message={t('Delete "{name}"? All associated time logs will also be deleted.', { name: deleteTarget?.name })}
       />
     </div>
   );

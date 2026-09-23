@@ -16,6 +16,11 @@ void begin();
 void loop();
 bool isConnected();
 
+// Installs a firmware image the dashboard asked for (message type "ota"),
+// but only once no session is running. Call from loop(); on success the
+// device reboots into the new image and never returns from here.
+void runPendingOta();
+
 }  // namespace WsClient
 
 #endif

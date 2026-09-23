@@ -23,7 +23,16 @@ void startStopwatch(uint32_t startMs, CRGB color);
 // Hold the matrix at a fixed duration (used while the user picks Save/Discard).
 void holdDuration(uint32_t totalSeconds, CRGB color);
 
+// Count down to `endMs` (a millis() timestamp) and hold 00:00:00 once it
+// is reached. Used by the pomodoro focus / break timers.
+void countdown(uint32_t endMs, CRGB color);
+
+// Blink the digits twice a second to draw attention (idle reminder, break
+// over). Works on top of any mode; clockMode() switches it off again.
+void setAttention(bool on);
+
 // Return to wall-clock display using the saved/default clock colour.
+// Also ends any attention blink.
 void clockMode();
 
 // Override the colour used by clockMode(). Applies immediately if the matrix

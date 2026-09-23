@@ -56,3 +56,42 @@ export const reports = {
   byProject: (params) => http.get('/reports/by-project', { params }).then(r => r.data),
   byApp:     (params) => http.get('/reports/by-app',     { params }).then(r => r.data),
 };
+
+// 401 = a dashboard password is set and this browser isn't logged in.
+// App.jsx shows the login screen when this fires.
+export function onUnauthorized(handler) {
+  const id = http.interceptors.response.use(r => r, (err) => {
+    if (err.response?.status === 401 && !err.config.url.startsWith('/auth')) handler();
+    return Promise.reject(err);
+  });
+  return () => http.interceptors.response.eject(id);
+}
+
+export const auth = {
+  status:      ()              => http.get('/auth').then(r => r.data),
+  login:       (password)      => http.post('/auth/login', { password }).then(r => r.data),
+  logout:      ()              => http.post('/auth/logout').then(r => r.data),
+  setPassword: (current, next) => http.put('/auth/password', { current, new: next }).then(r => r.data),
+};
+
+export const serverSettings = {
+  get: ()     => http.get('/settings').then(r => r.data),
+  set: (data) => http.put('/settings', data).then(r => r.data),
+};
+
+const upload = (url, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return http.post(url, form).then(r => r.data);
+};
+
+export const backup = {
+  downloadUrl: '/api/v1/backup',
+  restore:     (file) => upload('/backup', file),
+};
+
+export const firmware = {
+  info:    ()         => http.get('/firmware').then(r => r.data),
+  upload:  (file)     => upload('/firmware', file),
+  install: (deviceId) => http.post(`/devices/${deviceId}/ota`).then(r => r.data),
+};

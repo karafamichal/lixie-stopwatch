@@ -74,6 +74,7 @@ class Project(db.Model):
     logo = db.Column(db.Text, nullable=True)
     completed = db.Column(db.Boolean, default=False, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
+    budget_hours = db.Column(db.Float, nullable=True)   # planned hours; None = no budget
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     timelogs = db.relationship('TimeLog', backref='project', cascade='all, delete-orphan', lazy='select')
@@ -91,6 +92,7 @@ class Project(db.Model):
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'color': self.color,
             'logo': self.logo,
+            'budget_hours': self.budget_hours,
             'created_at': self.created_at.isoformat(),
         }
 
@@ -173,3 +175,10 @@ class TimeLog(db.Model):
             'status': self.status,
             'synced_at': self.synced_at.isoformat(),
         }
+
+
+class AppSetting(db.Model):
+    """Server-wide key/value settings (dashboard password hash, currency,
+    uploaded firmware metadata)."""
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=True)

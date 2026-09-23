@@ -27,7 +27,8 @@ enum Screen {
     SCR_DISCARD_CONFIRM,
     SCR_SETTINGS,
     SCR_TOAST,
-    SCR_SLEEP          // dim auto-sleep view; touch anywhere wakes back
+    SCR_SLEEP,         // dim auto-sleep view; touch anywhere wakes back
+    SCR_REMINDER       // "Forgot to start?" prompt after a long idle stretch
 };
 
 // Show a one-line status while booting (WiFi, NTP, ...).
@@ -36,8 +37,16 @@ void showBootMessage(const String& msg);
 // Switch screen and force a full redraw next tick.
 void goTo(Screen s);
 
+// Force a full repaint of the current screen on the next tick (used after
+// a language change arrives from the dashboard).
+void redraw();
+
 // Returns current screen.
 Screen current();
+
+// True while a session is being timed or waits to be saved — background
+// jobs (firmware update, night dimming) must not interfere then.
+bool sessionActive();
 
 // Tick once per ~50 ms — handles redraws of dynamic content (clock, timer).
 void tick();
@@ -80,6 +89,7 @@ LiveSnapshot getLiveSnapshot();
 //   - on IDLE:    weather{}, news_headline, idle_date
 //   - on CLIENT / PROJECT / APP: list_rows[], list_offset, list_count
 //   - on TOAST:   toast_message
+//   - on RUNNING with pomodoro: pomo_phase ("focus"|"break"|"break_over"), pomo_left
 // Other screens get nothing added.
 void writeStateExtras(JsonDocument& doc);
 

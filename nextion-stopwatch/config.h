@@ -45,15 +45,24 @@
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://ipaddr:5000/api/v1"
+#define API_BASE_URL  "http://changeme:5000/api/v1"
 
 // Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "ipaddr"
+#define WS_HOST       "changeme"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
-#define HARDWARE_ID   "esp32_lixie_002"
+#define HARDWARE_ID   "esp32_lixie_001"
+
+// Shown on the dashboard's Devices page. Bump it for every build you push
+// over the air so you can see which devices already run the new image.
+#define FW_VERSION    "1.0.0"
+
+// Sessions that could not reach the server are kept in NVS and retried
+// once a minute while idle. NVS strings max out at ~4 KB, which fits
+// about this many entries.
+#define OFFLINE_QUEUE_MAX 16
 
 // ============================================================================
 // Idle-screen content sources (weather + news headlines)

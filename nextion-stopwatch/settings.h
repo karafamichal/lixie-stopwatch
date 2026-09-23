@@ -2,11 +2,13 @@
 #define SETTINGS_H
 
 #include <Arduino.h>
+#include "lang.h"
 
 // User-tweakable runtime preferences for the LED matrix and the Nextion
 // touch display. Persisted in NVS (Preferences namespace "leds"), survive
 // power cycles. The on-device Settings screen writes the LED ones; the
-// rest only arrive via the WebSocket from the dashboard.
+// rest only arrive via the WebSocket from the dashboard (language is
+// editable from both).
 namespace Settings {
 
 void begin();                              // load NVS values and apply them
@@ -41,6 +43,40 @@ void     setSleepTimeoutSec(uint16_t s);
 // only entered from the running stopwatch view.
 bool sleepOnIdle();
 void setSleepOnIdle(bool on);
+
+// UI language of the Nextion display. Editable from the on-device Settings
+// screen and from the web dashboard. Applied to Lang:: immediately.
+Language language();
+void     setLanguage(Language l);
+
+// Pomodoro: focus block length in minutes (0 = off) and the break that
+// follows each block. Dashboard-only.
+uint8_t pomodoroMin();
+void    setPomodoroMin(uint8_t m);
+uint8_t breakMin();
+void    setBreakMin(uint8_t m);
+
+// Idle reminder: minutes on the home screen without a touch before the
+// "Forgot to start?" prompt appears (0 = off). Dashboard-only.
+uint16_t reminderMin();
+void     setReminderMin(uint16_t m);
+
+// Night mode: between nightStart and nightEnd (local hours, 0..23, the
+// window may wrap past midnight) the LED matrix drops to nightBrightness
+// (0 = off). Disabled while start == end. Dashboard-only.
+uint8_t nightStart();
+uint8_t nightEnd();
+uint8_t nightBrightness();
+void    setNightStart(uint8_t h);
+void    setNightEnd(uint8_t h);
+void    setNightBrightness(uint8_t b);
+
+// True while the local time is inside the night window (false before NTP).
+bool isNightNow();
+
+// Call about once a second. Applies the night brightness or the normal one;
+// `sessionActive` keeps full brightness while someone is timing work.
+void applyNightMode(bool sessionActive);
 
 }  // namespace Settings
 

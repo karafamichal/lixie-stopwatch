@@ -1,12 +1,18 @@
 import os
+import io
 import json
+import time
+import secrets
+import hashlib
+import sqlite3
 import threading
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, request, send_from_directory, abort
+from flask import Flask, jsonify, request, send_from_directory, send_file, abort, session
 from flask_cors import CORS
 from flask_sock import Sock
 from sqlalchemy import text, inspect as sa_inspect
-from models import db, Client, Project, App, Device, TimeLog, BUILTIN_APPS
+from werkzeug.security import generate_password_hash, check_password_hash
+from models import db, Client, Project, App, Device, TimeLog, AppSetting, BUILTIN_APPS
 
 
 # ─── Real-time hub ───────────────────────────────────────────────────────────
@@ -81,6 +87,8 @@ def _migrate(app):
                 pending.append('ALTER TABLE project ADD COLUMN completed BOOLEAN NOT NULL DEFAULT 0')
             if 'completed_at' not in cols('project'):
                 pending.append('ALTER TABLE project ADD COLUMN completed_at DATETIME')
+            if 'budget_hours' not in cols('project'):
+                pending.append('ALTER TABLE project ADD COLUMN budget_hours REAL')
 
         if 'app' in existing_tables:
             if 'hourly_rate' not in cols('app'):
@@ -126,6 +134,49 @@ def _seed_apps(app):
             db.session.commit()
 
 
+def _get_setting(key, default=None):
+    row = db.session.get(AppSetting, key)
+    return row.value if row and row.value is not None else default
+
+
+def _set_setting(key, value):
+    row = db.session.get(AppSetting, key)
+    if row is None:
+        row = AppSetting(key=key)
+        db.session.add(row)
+    row.value = value
+    db.session.commit()
+
+
+def _secret_key(instance_dir):
+    """Session-signing key, generated once and kept next to the database so
+    logins survive restarts."""
+    path = os.path.join(instance_dir, 'secret_key')
+    if not os.path.exists(path):
+        with open(path, 'w') as f:
+            f.write(secrets.token_hex(32))
+    with open(path) as f:
+        return f.read().strip()
+
+
+# Endpoints the ESP32 calls without a session. Everything else under /api/
+# needs a dashboard login once a password has been set.
+_PUBLIC_ENDPOINTS = {
+    ('GET',  '/api/v1/clients'),
+    ('GET',  '/api/v1/projects'),
+    ('GET',  '/api/v1/apps'),
+    ('POST', '/api/v1/timelogs'),
+    ('POST', '/api/v1/devices/heartbeat'),
+    ('GET',  '/api/v1/auth'),
+    ('POST', '/api/v1/auth/login'),
+    ('POST', '/api/v1/auth/logout'),
+}
+
+# Largest image the OTA endpoint accepts — the default ESP32 OTA partition
+# ("app0"/"app1") is 1.9 MB, the biggest common scheme is 3 MB.
+_MAX_FIRMWARE_BYTES = 4 * 1024 * 1024
+
+
 def create_app():
     basedir = os.path.abspath(os.path.dirname(__file__))
     static_dir = os.path.join(basedir, 'static')
@@ -146,6 +197,13 @@ def create_app():
     app = Flask(__name__, static_folder=None)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + new_db
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SECRET_KEY'] = _secret_key(instance_dir)
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+    # Backups and firmware images are the largest uploads (logos are stored
+    # as data URLs inside the DB, so a backup can be a few MB).
+    app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
+    firmware_path = os.path.join(instance_dir, 'firmware.bin')
 
     CORS(app, resources={r'/api/*': {'origins': '*'}})
     db.init_app(app)
@@ -157,6 +215,193 @@ def create_app():
 
     _migrate(app)
     _seed_apps(app)
+
+    def _auth_required():
+        return bool(_get_setting('password_hash'))
+
+    def _logged_in():
+        return not _auth_required() or session.get('auth') is True
+
+    @app.before_request
+    def require_login():
+        path = request.path
+        if not path.startswith('/api/') or request.method == 'OPTIONS':
+            return
+        if (request.method, path) in _PUBLIC_ENDPOINTS:
+            return
+        # The WS handler checks dashboard subscribers itself (devices connect
+        # without a session); firmware downloads are guarded by a random token.
+        if path == '/api/v1/ws' or path.startswith('/api/v1/firmware/'):
+            return
+        if not _logged_in():
+            abort(401)
+
+    # ── Auth ─────────────────────────────────────────────────────────────────
+
+    @app.route('/api/v1/auth', methods=['GET'])
+    def auth_status():
+        return jsonify({'enabled': _auth_required(), 'authenticated': _logged_in()})
+
+    @app.route('/api/v1/auth/login', methods=['POST'])
+    def auth_login():
+        data = request.get_json() or {}
+        stored = _get_setting('password_hash')
+        if not stored:
+            return jsonify({'enabled': False, 'authenticated': True})
+        if not check_password_hash(stored, str(data.get('password') or '')):
+            time.sleep(1)   # ponytail: flat delay, add per-IP lockout if exposed beyond the LAN
+            abort(401)
+        session.permanent = True
+        session['auth'] = True
+        return jsonify({'enabled': True, 'authenticated': True})
+
+    @app.route('/api/v1/auth/logout', methods=['POST'])
+    def auth_logout():
+        session.clear()
+        return jsonify({'enabled': _auth_required(), 'authenticated': not _auth_required()})
+
+    @app.route('/api/v1/auth/password', methods=['PUT'])
+    def auth_set_password():
+        """Set, change or remove (empty `new`) the dashboard password.
+        Changing an existing password requires the current one."""
+        data = request.get_json() or {}
+        stored = _get_setting('password_hash')
+        if stored and not check_password_hash(stored, str(data.get('current') or '')):
+            abort(400, description='current password is wrong')
+        new = str(data.get('new') or '')
+        if new and len(new) < 6:
+            abort(400, description='password must be at least 6 characters')
+        _set_setting('password_hash', generate_password_hash(new) if new else None)
+        session.permanent = True
+        session['auth'] = True
+        return jsonify({'enabled': bool(new), 'authenticated': True})
+
+    # ── Server settings ──────────────────────────────────────────────────────
+
+    @app.route('/api/v1/settings', methods=['GET', 'PUT'])
+    def server_settings():
+        if request.method == 'PUT':
+            data = request.get_json() or {}
+            if 'currency' in data:
+                cur = str(data['currency'] or '').strip().upper()
+                if len(cur) != 3 or not cur.isalpha():
+                    abort(400, description='currency must be a 3-letter ISO code, e.g. EUR')
+                _set_setting('currency', cur)
+        return jsonify({'currency': _get_setting('currency', 'EUR')})
+
+    # ── Backup / restore ─────────────────────────────────────────────────────
+
+    @app.route('/api/v1/backup', methods=['GET'])
+    def backup_download():
+        src = sqlite3.connect(new_db)
+        try:
+            data = src.serialize()   # consistent snapshot, even while the app writes
+        finally:
+            src.close()
+        name = f"lixie-backup-{datetime.now().strftime('%Y%m%d-%H%M')}.db"
+        return send_file(io.BytesIO(data), as_attachment=True, download_name=name,
+                         mimetype='application/vnd.sqlite3')
+
+    @app.route('/api/v1/backup', methods=['POST'])
+    def backup_restore():
+        f = request.files.get('file')
+        data = f.read() if f else b''
+        if not data.startswith(b'SQLite format 3\x00'):
+            abort(400, description='not a SQLite database file')
+        incoming = sqlite3.connect(':memory:')
+        try:
+            try:
+                incoming.deserialize(data)
+                tables = {r[0] for r in incoming.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}
+                ok = incoming.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+            except sqlite3.DatabaseError:
+                abort(400, description='the database file is damaged')
+            if not ok:
+                abort(400, description='the database file is damaged')
+            if not {'client', 'project', 'time_log'} <= tables:
+                abort(400, description='this is not a Lixie StopWatch backup')
+            db.session.remove()
+            db.engine.dispose()
+            live = sqlite3.connect(new_db)
+            try:
+                incoming.backup(live)   # page-by-page copy into the live file
+            finally:
+                live.close()
+        finally:
+            incoming.close()
+        db.create_all()
+        _migrate(app)
+        _seed_apps(app)
+        return jsonify({'restored': True})
+
+    # ── Firmware (OTA) ───────────────────────────────────────────────────────
+
+    def _firmware_info():
+        if not os.path.exists(firmware_path):
+            return None
+        return {
+            'name':        _get_setting('fw_name'),
+            'size':        int(_get_setting('fw_size', 0)),
+            'md5':         _get_setting('fw_md5'),
+            'uploaded_at': _get_setting('fw_uploaded_at'),
+        }
+
+    @app.route('/api/v1/firmware', methods=['GET'])
+    def firmware_info():
+        return jsonify(_firmware_info())
+
+    @app.route('/api/v1/firmware', methods=['POST'])
+    def firmware_upload():
+        f = request.files.get('file')
+        data = f.read() if f else b''
+        # An ESP32 app image starts with 0xE9 and carries the app-descriptor
+        # magic 0xABCD5432 at offset 32. The bootloader and the "merged"
+        # full-flash image also start with 0xE9 but lack the descriptor —
+        # flashing either into the app slot would brick the device.
+        if len(data) < 36 or data[0] != 0xE9 or data[32:36] != b'\x32\x54\xcd\xab':
+            abort(400, description='not an ESP32 app image — upload <sketch>.ino.bin '
+                                   '(not .bootloader.bin, .merged.bin or .partitions.bin)')
+        if len(data) > _MAX_FIRMWARE_BYTES:
+            abort(400, description='firmware image is too large')
+        with open(firmware_path, 'wb') as out:
+            out.write(data)
+        _set_setting('fw_name', os.path.basename(f.filename or 'firmware.bin'))
+        _set_setting('fw_size', str(len(data)))
+        _set_setting('fw_md5', hashlib.md5(data).hexdigest())
+        _set_setting('fw_uploaded_at', datetime.utcnow().isoformat() + 'Z')
+        # New token per upload: the download URL is unguessable and stale
+        # links stop working once a newer image replaces this one.
+        _set_setting('fw_token', secrets.token_urlsafe(24))
+        return jsonify(_firmware_info()), 201
+
+    @app.route('/api/v1/firmware/<token>.bin', methods=['GET'])
+    def firmware_download(token):
+        expected = _get_setting('fw_token')
+        if not expected or not secrets.compare_digest(token, expected) \
+                or not os.path.exists(firmware_path):
+            abort(404)
+        resp = send_file(firmware_path, mimetype='application/octet-stream')
+        # ESP32 HTTPUpdate verifies the image against this before booting it.
+        resp.headers['x-MD5'] = _get_setting('fw_md5')
+        return resp
+
+    @app.route('/api/v1/devices/<int:did>/ota', methods=['POST'])
+    def device_ota(did):
+        """Tell a connected device to download and flash the uploaded image.
+        The device refuses while a session is running and reports the
+        outcome in its next state push (`ota_status`)."""
+        device = db.get_or_404(Device, did)
+        info = _firmware_info()
+        if not info:
+            abort(400, description='upload a firmware image first')
+        delivered = _send_to_device(device.hardware_id, {
+            'type': 'ota',
+            # Relative to the device's own API_BASE_URL, so it downloads from
+            # the same address it already talks to.
+            'path': f"/firmware/{_get_setting('fw_token')}.bin",
+        })
+        return jsonify({'delivered': delivered})
 
     # ── Clients ──────────────────────────────────────────────────────────────
 
@@ -214,11 +459,30 @@ def create_app():
 
     @app.route('/api/v1/projects/all', methods=['GET'])
     def get_all_projects():
+        """Dashboard list — includes tracked time so budgets can be shown."""
         client_id = request.args.get('client_id', type=int)
         q = Project.query
         if client_id:
             q = q.filter_by(client_id=client_id)
-        return jsonify([p.to_dict() for p in q.order_by(Project.name).all()])
+        tracked = dict(db.session.query(
+            TimeLog.project_id, db.func.sum(TimeLog.duration_seconds)
+        ).group_by(TimeLog.project_id).all())
+        return jsonify([
+            {**p.to_dict(), 'tracked_seconds': int(tracked.get(p.id) or 0)}
+            for p in q.order_by(Project.name).all()
+        ])
+
+    def _budget(data):
+        v = data.get('budget_hours')
+        if v in (None, ''):
+            return None
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            abort(400, description='budget_hours must be a number')
+        if v < 0:
+            abort(400, description='budget_hours must not be negative')
+        return v or None
 
     @app.route('/api/v1/projects', methods=['POST'])
     def create_project():
@@ -231,6 +495,7 @@ def create_app():
             active=data.get('active', True),
             color=data.get('color', '#FF8000'),
             logo=data.get('logo'),
+            budget_hours=_budget(data),
         )
         db.session.add(project)
         db.session.commit()
@@ -250,6 +515,8 @@ def create_app():
             project.color = data['color']
         if 'logo' in data:
             project.logo = data['logo']
+        if 'budget_hours' in data:
+            project.budget_hours = _budget(data)
         if 'completed' in data:
             val = bool(data['completed'])
             if val and not project.completed:
@@ -278,9 +545,11 @@ def create_app():
             App.id, App.name, App.icon, App.color, App.hourly_rate
         ).all()
 
-        total_seconds = db.session.query(
-            db.func.coalesce(db.func.sum(TimeLog.duration_seconds), 0)
-        ).filter(TimeLog.project_id == pid).scalar()
+        total_seconds, first_ts, last_ts = db.session.query(
+            db.func.coalesce(db.func.sum(TimeLog.duration_seconds), 0),
+            db.func.min(TimeLog.start_timestamp),
+            db.func.max(TimeLog.start_timestamp),
+        ).filter(TimeLog.project_id == pid).one()
 
         breakdown = []
         total_earnings = 0.0
@@ -302,6 +571,9 @@ def create_app():
         return jsonify({
             'project_id': pid,
             'project_name': project.name,
+            'client_name': project.client.name if project.client else None,
+            'first_log': first_ts.isoformat() if first_ts else None,
+            'last_log': last_ts.isoformat() if last_ts else None,
             'total_seconds': int(total_seconds or 0),
             'total_earnings': round(total_earnings, 2),
             'breakdown': breakdown,
@@ -518,7 +790,29 @@ def create_app():
         'display_brightness',
         'sleep_timeout_sec',
         'sleep_on_idle',
+        'language',
+        'pomodoro_min',
+        'break_min',
+        'reminder_min',
+        'night_start',
+        'night_end',
+        'night_brightness',
     )
+
+    # Integer device settings: key -> (min, max). 0 disables pomodoro_min /
+    # reminder_min; night mode is off while night_start == night_end.
+    _DEVICE_INT_RANGES = {
+        'pomodoro_min':     (0, 120),
+        'break_min':        (1, 60),
+        'reminder_min':     (0, 480),
+        'night_start':      (0, 23),
+        'night_end':        (0, 23),
+        'night_brightness': (0, 255),
+    }
+
+    # UI languages the firmware ships string tables for (see
+    # nextion-stopwatch/lang.cpp). Keep in sync when adding a translation.
+    _DEVICE_LANGUAGES = ('en', 'de')
 
     @app.route('/api/v1/devices/<int:did>/settings', methods=['GET', 'PUT'])
     def device_settings(did):
@@ -534,6 +828,12 @@ def create_app():
           - display_brightness 0..100 (% Nextion backlight; 0 = off)
           - sleep_timeout_sec  0..65535 (seconds, 0 disables auto-sleep)
           - sleep_on_idle      bool — also apply timeout from the idle screen
+          - language           "en" | "de" — Nextion touch-screen UI language
+          - pomodoro_min       0..120 focus block length (0 = off)
+          - break_min          1..60  break length after each focus block
+          - reminder_min       0..480 idle minutes before "forgot to start?" (0 = off)
+          - night_start / night_end  0..23 hours; LEDs dim in between (equal = off)
+          - night_brightness   0..255 LED brightness at night (0 = LEDs off)
 
         Settings are cached server-side so they survive both dashboard
         refreshes and brief device disconnects — when the device next sends a
@@ -556,6 +856,8 @@ def create_app():
                 'display_brightness': cached.get('display_brightness'),
                 'sleep_timeout_sec':  cached.get('sleep_timeout_sec'),
                 'sleep_on_idle':      cached.get('sleep_on_idle', False),
+                'language':           cached.get('language'),
+                **{k: cached.get(k) for k in _DEVICE_INT_RANGES},
                 'online':             online,
             })
 
@@ -600,6 +902,20 @@ def create_app():
             update['sleep_timeout_sec'] = s
         if 'sleep_on_idle' in data:
             update['sleep_on_idle'] = bool(data['sleep_on_idle'])
+        if 'language' in data:
+            lang = str(data['language'] or '').strip().lower()
+            if lang not in _DEVICE_LANGUAGES:
+                abort(400, description=f"language must be one of {', '.join(_DEVICE_LANGUAGES)}")
+            update['language'] = lang
+        for key, (lo, hi) in _DEVICE_INT_RANGES.items():
+            if key in data:
+                try:
+                    v = int(data[key])
+                except (TypeError, ValueError):
+                    abort(400, description=f"{key} must be an integer")
+                if not lo <= v <= hi:
+                    abort(400, description=f"{key} must be {lo}..{hi}")
+                update[key] = v
         if not update:
             abort(400, description="nothing to update")
 
@@ -837,6 +1153,14 @@ def create_app():
                     with _live_lock:
                         _live_states[hw_id] = msg
                         _device_sockets[hw_id] = ws
+                        # The device reports the language it is actually
+                        # showing (the user may have switched it on the touch
+                        # screen). Fold it into the cache before the reconnect
+                        # re-push below reads it, so a stale server value never
+                        # overrides an on-device choice.
+                        lang = msg.get('language')
+                        if lang in _DEVICE_LANGUAGES:
+                            _device_settings.setdefault(hw_id, {})['language'] = lang
                         cached_settings = _device_settings.get(hw_id)
 
                     # Keep the existing "Online" indicator working — same
@@ -867,6 +1191,8 @@ def create_app():
                             pass
 
                 elif mtype == 'subscribe':
+                    if not _logged_in():
+                        break
                     role = 'subscriber'
                     with _live_lock:
                         _live_subscribers.add(ws)
@@ -907,6 +1233,14 @@ def create_app():
     @app.errorhandler(400)
     def bad_request(e):
         return jsonify({'error': str(e.description)}), 400
+
+    @app.errorhandler(401)
+    def unauthorized(e):
+        return jsonify({'error': 'login required'}), 401
+
+    @app.errorhandler(413)
+    def too_large(e):
+        return jsonify({'error': 'file is too large (max 64 MB)'}), 413
 
     @app.errorhandler(404)
     def not_found(e):

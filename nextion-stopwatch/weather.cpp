@@ -1,6 +1,7 @@
 #include "weather.h"
 #include "config.h"
 #include "utf8cp1250.h"
+#include "lang.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -10,21 +11,6 @@ static WeatherInfo sInfo;
 static float       sLat = 0;
 static float       sLon = 0;
 static bool        sHaveGeo = false;
-
-// WMO weather code → short human label. Open-Meteo uses these on
-// `current_weather.weathercode`.
-static const char* describeWmo(int c) {
-    if (c == 0)  return "Clear";
-    if (c <= 3)  return "Partly cloudy";
-    if (c <= 48) return "Fog";
-    if (c <= 57) return "Drizzle";
-    if (c <= 67) return "Rain";
-    if (c <= 77) return "Snow";
-    if (c <= 82) return "Showers";
-    if (c <= 86) return "Snow showers";
-    if (c <= 99) return "Thunderstorm";
-    return "Unknown";
-}
 
 static bool fetchGeo() {
     HTTPClient http;
@@ -116,13 +102,12 @@ bool refresh() {
     }
 
     sInfo.tempC     = doc["current_weather"]["temperature"].as<float>();
-    int wcode       = doc["current_weather"]["weathercode"].as<int>();
-    sInfo.condition = describeWmo(wcode);
+    sInfo.wmoCode   = doc["current_weather"]["weathercode"].as<int>();
     sInfo.valid     = true;
     sInfo.lastUpdateMs = millis();
     if (sInfo.lastUpdateMs == 0) sInfo.lastUpdateMs = 1;
     Serial.printf("[weather] %s %.1fC %s\n",
-                  sInfo.city.c_str(), sInfo.tempC, sInfo.condition.c_str());
+                  sInfo.city.c_str(), sInfo.tempC, Lang::weather(sInfo.wmoCode));
     return true;
 }
 

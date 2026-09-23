@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // Preset palette tuned for WS2812B LED visibility
 const PRESETS = [
   { hex: '#FF8000', label: 'Lixie orange' },
@@ -30,7 +31,7 @@ export default function ColorPicker({ value = '#FF8000', onChange }) {
             <button
               key={hex}
               type="button"
-              title={label}
+              title={t(label)}
               onClick={() => onChange(hex)}
               className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg transition-all hover:scale-110 ${
                 active ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110' : ''
@@ -48,9 +49,9 @@ export default function ColorPicker({ value = '#FF8000', onChange }) {
           value={value}
           onChange={e => onChange(e.target.value.toUpperCase())}
           className="w-10 h-10 sm:w-8 sm:h-8 rounded cursor-pointer border-0 bg-transparent p-0"
-          title="Custom colour"
+          title={t('Custom colour')}
         />
-        <span className="text-xs text-slate-500">Custom</span>
+        <span className="text-xs text-slate-500">{t('Custom')}</span>
       </div>
     </div>
   );

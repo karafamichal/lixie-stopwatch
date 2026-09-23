@@ -23,3 +23,8 @@ nextion-stopwatch/.vscode/
 # OS/editor noise
 Thumbs.db
 .DS_Store
+
+# Built dashboard and runtime data (created by install.sh / vite build)
+web-dashboard/backend/static/
+web-dashboard/backend/instance/
+nextion-stopwatch/build/

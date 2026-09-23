@@ -7,7 +7,7 @@ struct WeatherInfo {
     bool     valid        = false;
     String   city;
     float    tempC        = 0;
-    String   condition;       // human-readable: "Clear", "Rain", ...
+    int      wmoCode      = -1;   // Open-Meteo weathercode; label via Lang::weather()
     uint32_t lastUpdateMs = 0;
 };
 

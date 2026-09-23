@@ -11,8 +11,32 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 namespace {
+
+// Offline queue: one JSON array in NVS namespace "queue", key "q".
+// Entry shape: {"c":clientId,"p":projectId,"a":appId,"s":"ISO start","d":seconds}
+int sQueued = -1;   // cached size, -1 = not read yet
+
+void loadQueue(JsonDocument& doc) {
+    Preferences p;
+    p.begin("queue", true);
+    String raw = p.getString("q", "[]");
+    p.end();
+    if (deserializeJson(doc, raw) || !doc.is<JsonArray>()) doc.to<JsonArray>();
+    sQueued = doc.as<JsonArray>().size();
+}
+
+void saveQueue(JsonDocument& doc) {
+    String raw;
+    serializeJson(doc, raw);
+    Preferences p;
+    p.begin("queue", false);
+    p.putString("q", raw);
+    p.end();
+    sQueued = doc.as<JsonArray>().size();
+}
 
 // Common GET helper. Caller provides a JsonDocument; we fill it from the
 // response body. Returns HTTP status code or a negative transport code on
@@ -112,13 +136,13 @@ int fetchApps(Entity* out, int max) {
     return n;
 }
 
-bool postTimelog(int clientId, int projectId, int appId,
-                 const String& start_ts, uint32_t duration_seconds) {
-    if (WiFi.status() != WL_CONNECTED) return false;
+int postTimelog(int clientId, int projectId, int appId,
+                const String& start_ts, uint32_t duration_seconds) {
+    if (WiFi.status() != WL_CONNECTED) return -1;
 
     HTTPClient http;
     http.setTimeout(5000);
-    if (!http.begin(String(API_BASE_URL) + "/timelogs")) return false;
+    if (!http.begin(String(API_BASE_URL) + "/timelogs")) return -2;
     http.addHeader("Content-Type", "application/json");
 
     JsonDocument req;
@@ -135,7 +159,56 @@ bool postTimelog(int clientId, int projectId, int appId,
 
     int code = http.POST(body);
     http.end();
-    return code == 200 || code == 201;
+    Serial.printf("[api] POST /timelogs -> %d\n", code);
+    return code;
+}
+
+bool queueTimelog(int clientId, int projectId, int appId,
+                  const String& start_ts, uint32_t duration_seconds) {
+    JsonDocument doc;
+    loadQueue(doc);
+    JsonArray arr = doc.as<JsonArray>();
+    if (arr.size() >= OFFLINE_QUEUE_MAX) return false;
+    JsonObject o = arr.add<JsonObject>();
+    o["c"] = clientId;
+    o["p"] = projectId;
+    o["a"] = appId;
+    o["s"] = start_ts;
+    o["d"] = duration_seconds;
+    saveQueue(doc);
+    Serial.printf("[queue] stored offline, %d pending\n", sQueued);
+    return true;
+}
+
+int queuedCount() {
+    if (sQueued < 0) {
+        JsonDocument doc;
+        loadQueue(doc);
+    }
+    return sQueued;
+}
+
+void flushQueue() {
+    if (queuedCount() == 0 || WiFi.status() != WL_CONNECTED) return;
+    JsonDocument doc;
+    loadQueue(doc);
+    JsonArray arr = doc.as<JsonArray>();
+    bool changed = false;
+    while (arr.size() > 0) {
+        JsonObject o = arr[0];
+        int code = postTimelog(o["c"] | 0, o["p"] | 0, o["a"] | -1,
+                               o["s"].as<String>(), o["d"] | 0);
+        if (isRetryable(code)) break;          // still offline — try again later
+        if (code >= 400) {
+            // e.g. the project was deleted meanwhile — the server will never
+            // take this entry, so drop it instead of blocking the queue.
+            Serial.printf("[queue] server rejected entry (%d), dropping\n", code);
+        }
+        arr.remove(0);
+        changed = true;
+    }
+    if (changed) saveQueue(doc);
+    Serial.printf("[queue] flush done, %d pending\n", sQueued);
 }
 
 bool sendHeartbeat() {

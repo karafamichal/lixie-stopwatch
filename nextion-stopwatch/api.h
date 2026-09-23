@@ -30,9 +30,22 @@ int fetchProjects(int clientId, Entity* out, int max);
 int fetchApps(Entity* out, int max);
 
 // POST /timelogs. start_ts is ISO 8601 UTC (e.g. "2026-05-28T14:00:00Z").
-// app_id < 0 means "no app".
-bool postTimelog(int clientId, int projectId, int appId,
-                 const String& start_ts, uint32_t duration_seconds);
+// app_id < 0 means "no app". Returns the HTTP status (2xx = saved), or a
+// value <= 0 when the server could not be reached at all.
+int postTimelog(int clientId, int projectId, int appId,
+                const String& start_ts, uint32_t duration_seconds);
+
+// True when a postTimelog() result is worth retrying later (no network,
+// timeout, server error). 4xx means the server rejected the data itself.
+inline bool isRetryable(int httpCode) { return httpCode <= 0 || httpCode >= 500; }
+
+// Offline queue, persisted in NVS. queueTimelog() returns false when the
+// queue is full (OFFLINE_QUEUE_MAX). flushQueue() re-sends queued sessions
+// in order and stops at the first one the server can't take yet.
+bool queueTimelog(int clientId, int projectId, int appId,
+                  const String& start_ts, uint32_t duration_seconds);
+int  queuedCount();
+void flushQueue();
 
 // POST /devices/heartbeat — keeps the dashboard's "Online" status truthful
 // in the gaps between time-log submissions.

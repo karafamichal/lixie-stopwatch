@@ -64,8 +64,8 @@ NX4024T032 pin   ESP32-S3-N16R8
 ─────────────    ───────────────
 +5V              5V   (USB-C from the dev board is enough)
 GND              GND
-TX (yellow)      GPIO17  (RX1)
-RX (blue)        GPIO18  (TX1)
+TX               GPIO18  (RX1)
+RX               GPIO17  (TX1)
 ```
 
 > GPIO19/20 are reserved for native USB on the N16R8 — using them for

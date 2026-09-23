@@ -45,15 +45,15 @@
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://localhost:5000/api/v1"
+#define API_BASE_URL  "http://ipaddr:5000/api/v1"
 
 // Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "localhost"
+#define WS_HOST       "ipaddr"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 
 // Identifier this device sends in POST /timelogs (auto-registers a row in `device`).
-#define HARDWARE_ID   "esp32_lixie_001"
+#define HARDWARE_ID   "esp32_lixie_002"
 
 // ============================================================================
 // Idle-screen content sources (weather + news headlines)

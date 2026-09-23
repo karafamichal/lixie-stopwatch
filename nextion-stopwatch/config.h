@@ -45,10 +45,10 @@
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
 // REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://193.87.172.155:5000/api/v1"
+#define API_BASE_URL  "http://changeme:5000/api/v1"
 
 // Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "193.87.172.155"
+#define WS_HOST       "changeme"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 

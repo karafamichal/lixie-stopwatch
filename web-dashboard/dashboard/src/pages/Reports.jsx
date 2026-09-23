@@ -4,6 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import * as api from '../api';
+import { t } from '../i18n';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ export default function Reports() {
 
   return (
     <div>
-      <h1 className="page-title mb-5 md:mb-6">Reports</h1>
+      <h1 className="page-title mb-5 md:mb-6">{t('Reports')}</h1>
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-end mb-5 md:mb-6">
@@ -145,7 +146,7 @@ export default function Reports() {
               onClick={() => applyPreset(p.days)}
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-400 hover:text-amber-400 hover:border-amber-500/50 transition-colors"
             >
-              {p.label}
+              {t(p.label)}
             </button>
           ))}
         </div>
@@ -154,20 +155,20 @@ export default function Reports() {
           <input type="date" className="input sm:w-36" value={to} min={from} max={today} onChange={e => setTo(e.target.value)} />
         </div>
         <select className="input sm:w-44" value={clientId} onChange={e => setClientId(e.target.value)}>
-          <option value="">All Clients</option>
+          <option value="">{t('All Clients')}</option>
           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <div className="sm:ml-auto flex items-center gap-4 text-sm">
           {loading ? (
-            <span className="text-slate-500">Loading…</span>
+            <span className="text-slate-500">{t('Loading…')}</span>
           ) : (
             <>
               <span className="text-slate-500">
-                <span className="text-amber-400 font-semibold">{fmtDuration(totalSeconds)}</span> tracked
+                <span className="text-amber-400 font-semibold">{fmtDuration(totalSeconds)}</span> {t('tracked')}
               </span>
               {totalEarnings > 0 && (
                 <span className="text-slate-500">
-                  <span className="text-green-400 font-semibold">€{totalEarnings.toFixed(2)}</span> earned
+                  <span className="text-green-400 font-semibold">€{totalEarnings.toFixed(2)}</span> {t('earned')}
                 </span>
               )}
             </>
@@ -177,9 +178,9 @@ export default function Reports() {
 
       <div className="space-y-5">
         {/* Daily trend */}
-        <Section title="Daily trend">
+        <Section title={t('Daily trend')}>
           {filledDaily.length === 0 ? (
-            <p className="text-slate-500 text-sm py-10 text-center">No data for this period.</p>
+            <p className="text-slate-500 text-sm py-10 text-center">{t('No data for this period.')}</p>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={filledDaily} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -201,9 +202,9 @@ export default function Reports() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* By client — time */}
-          <Section title="By client — time">
+          <Section title={t('By client — time')}>
             {byClient.length === 0 ? (
-              <p className="text-slate-500 text-sm py-8 text-center">No data.</p>
+              <p className="text-slate-500 text-sm py-8 text-center">{t('No data.')}</p>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(byClient.length * 42, 120)}>
                 <BarChart data={byClient} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
@@ -222,9 +223,9 @@ export default function Reports() {
           </Section>
 
           {/* By app */}
-          <Section title="By application">
+          <Section title={t('By application')}>
             {byApp.length === 0 ? (
-              <p className="text-slate-500 text-sm py-8 text-center">No data.</p>
+              <p className="text-slate-500 text-sm py-8 text-center">{t('No data.')}</p>
             ) : (
               <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
                 <div className="w-full sm:w-1/2">
@@ -269,7 +270,7 @@ export default function Reports() {
 
         {/* Earnings by project */}
         {earningProjects.length > 0 && (
-          <Section title="Earnings by project (€)">
+          <Section title={t('Earnings by project (€)')}>
             <ResponsiveContainer width="100%" height={Math.max(earningProjects.length * 42, 120)}>
               <BarChart data={earningProjects} layout="vertical" margin={{ top: 0, right: 60, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
@@ -296,14 +297,14 @@ export default function Reports() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <p className="text-xs text-slate-600 mt-2">Green bars = completed projects. Only projects with at least one app hourly rate set are shown.</p>
+            <p className="text-xs text-slate-600 mt-2">{t('Green bars = completed projects. Only projects with at least one app hourly rate set are shown.')}</p>
           </Section>
         )}
 
         {/* By project list */}
-        <Section title="By project">
+        <Section title={t('By project')}>
           {byProject.length === 0 ? (
-            <p className="text-slate-500 text-sm py-6 text-center">No data.</p>
+            <p className="text-slate-500 text-sm py-6 text-center">{t('No data.')}</p>
           ) : (() => {
             const max = byProject[0]?.seconds || 1;
             return (

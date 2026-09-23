@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { t } from '../i18n';
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }) {
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
           <button
             onClick={onClose}
             className="p-2 -mr-2 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-700 transition-colors"
-            aria-label="Close"
+            aria-label={t('Close')}
           >
             <X className="w-5 h-5" />
           </button>

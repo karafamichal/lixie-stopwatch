@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as api from '../api';
+import { t } from '../i18n';
 
 const DISP_W = 400;
 const DISP_H = 240;
@@ -634,7 +635,7 @@ export default function RemoteDisplay({ device, online, state }) {
 
   const handleClick = async (e) => {
     if (!online) {
-      setError('Device is offline.');
+      setError(t('Device is offline.'));
       return;
     }
     const rect = surfaceRef.current.getBoundingClientRect();
@@ -650,7 +651,7 @@ export default function RemoteDisplay({ device, online, state }) {
     try {
       await api.devices.remoteTouch(device.id, clamped.x, clamped.y);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send touch');
+      setError(err.response?.data?.error || t('Failed to send touch'));
     } finally {
       setSending(false);
     }
@@ -661,7 +662,7 @@ export default function RemoteDisplay({ device, online, state }) {
       <div className="flex items-center justify-between text-xs">
         <p className="text-slate-500 font-mono truncate">{device.hardware_id}</p>
         <span className={online ? 'text-emerald-400' : 'text-slate-500'}>
-          {online ? '● live' : '○ offline'}
+          {online ? t('● live') : t('○ offline')}
         </span>
       </div>
 
@@ -713,18 +714,17 @@ export default function RemoteDisplay({ device, online, state }) {
 
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="text-slate-500">
-          Screen: <span className="text-slate-300">{screen}</span>
-          {sending && <span className="ml-2 text-amber-400">sending…</span>}
+          {t('Screen:')} <span className="text-slate-300">{screen}</span>
+          {sending && <span className="ml-2 text-amber-400">{t('sending…')}</span>}
         </span>
         {error && <span className="text-red-400">{error}</span>}
         {!online && !error && (
-          <span className="text-slate-500">Reconnect the device to control it.</span>
+          <span className="text-slate-500">{t('Reconnect the device to control it.')}</span>
         )}
       </div>
 
       <p className="text-xs text-slate-500">
-        Click anywhere on the screen above to send a touch to the device. The mirror
-        re-renders within a tick after the device confirms the new screen.
+        {t('Click anywhere on the screen above to send a touch to the device. The mirror re-renders within a tick after the device confirms the new screen.')}
       </p>
     </div>
   );

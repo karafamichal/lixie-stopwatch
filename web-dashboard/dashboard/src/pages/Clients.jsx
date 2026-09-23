@@ -6,6 +6,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
+import { t } from '../i18n';
 
 const empty = { name: '', active: true, color: '#FF8000', logo: null };
 
@@ -60,7 +61,7 @@ export default function Clients() {
       if (editTarget) { await api.clients.update(editTarget.id, form); }
       else            { await api.clients.create(form); }
       setModalOpen(false); load();
-    } catch (err) { setError(err.response?.data?.error || 'Something went wrong'); }
+    } catch (err) { setError(err.response?.data?.error || t('Something went wrong')); }
   };
 
   const handleDelete = async () => { await api.clients.remove(deleteTarget.id); setDeleteTarget(null); load(); };
@@ -87,10 +88,10 @@ export default function Clients() {
   const renderProjectList = (c) => {
     const data = clientData[c.id];
     if (data?.loading) {
-      return <p className="text-slate-500 text-sm px-4 sm:px-10 py-4">Loading projects…</p>;
+      return <p className="text-slate-500 text-sm px-4 sm:px-10 py-4">{t('Loading projects…')}</p>;
     }
     if (!data || data.projects.length === 0) {
-      return <p className="text-slate-600 text-sm px-4 sm:px-10 py-4">No projects for this client.</p>;
+      return <p className="text-slate-600 text-sm px-4 sm:px-10 py-4">{t('No projects for this client.')}</p>;
     }
     return (
       <div className="px-3 sm:px-6 py-3 space-y-1">
@@ -112,11 +113,11 @@ export default function Clients() {
               </div>
               {p.completed ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/60 text-emerald-400 border border-emerald-700/40 flex-shrink-0">
-                  <CheckCircle className="w-3 h-3" /> Done
+                  <CheckCircle className="w-3 h-3" /> {t('Done')}
                 </span>
               ) : (
                 <span className={`flex-shrink-0 ${p.active ? 'badge-active' : 'badge-inactive'}`}>
-                  {p.active ? 'Active' : 'Inactive'}
+                  {p.active ? t('Active') : t('Inactive')}
                 </span>
               )}
               <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0 transition-colors" />
@@ -128,7 +129,7 @@ export default function Clients() {
             className="text-xs text-amber-400 hover:text-amber-300 transition-colors px-2 sm:px-3"
             onClick={() => navigate(`/projects?client_id=${c.id}`)}
           >
-            View all projects →
+            {t('View all projects →')}
           </button>
         </div>
       </div>
@@ -138,9 +139,9 @@ export default function Clients() {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">Clients</h1>
+        <h1 className="page-title">{t('Clients')}</h1>
         <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Client
+          <Plus className="w-4 h-4" /> {t('Add Client')}
         </button>
       </div>
 
@@ -151,17 +152,17 @@ export default function Clients() {
             <tr className="bg-slate-800/60">
               <th className="p-0 w-[5px]" />
               <th className="th w-8" />
-              <th className="th">Name</th>
-              <th className="th">Status</th>
-              <th className="th">Created</th>
-              <th className="th text-right">Actions</th>
+              <th className="th">{t('Name')}</th>
+              <th className="th">{t('Status')}</th>
+              <th className="th">{t('Created')}</th>
+              <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">Loading…</td></tr>
+              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : clients.length === 0 ? (
-              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">No clients yet. Add one to get started.</td></tr>
+              <tr><td colSpan={6} className="td text-center text-slate-500 py-10">{t('No clients yet. Add one to get started.')}</td></tr>
             ) : clients.map(c => (
               <>
                 <tr key={c.id} className="tr">
@@ -179,17 +180,17 @@ export default function Clients() {
                   </td>
                   <td className="td">
                     <span className={c.active ? 'badge-active' : 'badge-inactive'}>
-                      {c.active ? 'Active' : 'Inactive'}
+                      {c.active ? t('Active') : t('Inactive')}
                     </span>
                   </td>
                   <td className="td text-sm text-slate-500">{new Date(c.created_at).toLocaleDateString()}</td>
                   <td className="td">
                     <div className="flex justify-end gap-1">
-                      <button className="icon-btn" title={c.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(c)}>
+                      <button className="icon-btn" title={c.active ? t('Deactivate') : t('Activate')} onClick={() => toggleActive(c)}>
                         {c.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
                       </button>
-                      <button className="icon-btn" title="Edit" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></button>
-                      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(c)}><Trash2 className="w-4 h-4" /></button>
+                      <button className="icon-btn" title={t('Edit')} onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></button>
+                      <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(c)}><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -210,9 +211,9 @@ export default function Clients() {
       {/* Mobile: card list */}
       <div className="md:hidden space-y-3">
         {loading ? (
-          <p className="text-center text-slate-500 py-10">Loading…</p>
+          <p className="text-center text-slate-500 py-10">{t('Loading…')}</p>
         ) : clients.length === 0 ? (
-          <p className="text-center text-slate-500 py-10">No clients yet. Add one to get started.</p>
+          <p className="text-center text-slate-500 py-10">{t('No clients yet. Add one to get started.')}</p>
         ) : clients.map(c => (
           <div key={c.id} className="card overflow-hidden" style={{ borderLeftColor: c.color || '#FF8000', borderLeftWidth: 4 }}>
             <div className="p-3 sm:p-4 flex items-center gap-3" onClick={() => toggleExpand(c)}>
@@ -221,7 +222,7 @@ export default function Clients() {
                 <p className="font-medium text-slate-100 truncate">{c.name}</p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   <span className={c.active ? 'badge-active' : 'badge-inactive'}>
-                    {c.active ? 'Active' : 'Inactive'}
+                    {c.active ? t('Active') : t('Inactive')}
                   </span>
                   <span className="ml-2">{new Date(c.created_at).toLocaleDateString()}</span>
                 </p>
@@ -231,11 +232,11 @@ export default function Clients() {
                 : <ChevronRight className="w-5 h-5 text-slate-500 flex-shrink-0" />}
             </div>
             <div className="px-2 sm:px-3 pb-2 flex items-center justify-end gap-1 border-t border-slate-700/60 pt-2">
-              <button className="icon-btn" title={c.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(c)}>
+              <button className="icon-btn" title={c.active ? t('Deactivate') : t('Activate')} onClick={() => toggleActive(c)}>
                 {c.active ? <ToggleRight className="w-5 h-5 text-green-400" /> : <ToggleLeft className="w-5 h-5" />}
               </button>
-              <button className="icon-btn" title="Edit" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></button>
-              <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(c)}><Trash2 className="w-4 h-4" /></button>
+              <button className="icon-btn" title={t('Edit')} onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></button>
+              <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(c)}><Trash2 className="w-4 h-4" /></button>
             </div>
             {expandedId === c.id && (
               <div className="bg-slate-900/60 border-t border-slate-700/50">
@@ -246,35 +247,35 @@ export default function Clients() {
         ))}
       </div>
 
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Edit Client' : 'Add Client'} size="lg">
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? t('Edit Client') : t('Add Client')} size="lg">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="label">Name</label>
-            <input className="input" type="text" required placeholder="e.g. Acme Corp"
+            <label className="label">{t('Name')}</label>
+            <input className="input" type="text" required placeholder={t('e.g. Acme Corp')}
               value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </div>
           <div>
-            <label className="label">Colour</label>
+            <label className="label">{t('Colour')}</label>
             <ColorPicker value={form.color} onChange={c => setForm(p => ({ ...p, color: c }))} />
           </div>
           <ImageUpload value={form.logo} onChange={v => setForm(p => ({ ...p, logo: v }))} />
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={form.active}
               onChange={e => setForm(p => ({ ...p, active: e.target.checked }))} />
-            <span className="text-sm text-slate-300">Active</span>
+            <span className="text-sm text-slate-300">{t('Active')}</span>
           </label>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>Cancel</button>
-            <button type="submit" className="btn-primary">{editTarget ? 'Save Changes' : 'Add Client'}</button>
+            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>{t('Cancel')}</button>
+            <button type="submit" className="btn-primary">{editTarget ? t('Save Changes') : t('Add Client')}</button>
           </div>
         </form>
       </Modal>
 
       <ConfirmDialog
         isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete}
-        title="Delete Client"
-        message={`Delete "${deleteTarget?.name}"? All associated projects and time logs will also be deleted.`}
+        title={t('Delete Client')}
+        message={t('Delete "{name}"? All associated projects and time logs will also be deleted.', { name: deleteTarget?.name })}
       />
     </div>
   );

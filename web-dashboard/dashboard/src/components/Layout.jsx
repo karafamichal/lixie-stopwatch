@@ -8,11 +8,13 @@ import {
   Cpu,
   AppWindow,
   BarChart2,
+  Settings,
   Menu,
   X,
 } from 'lucide-react';
+import { t } from '../i18n';
 
-const nav = [
+export const nav = [
   { to: '/overview', icon: LayoutDashboard, label: 'Homepage' },
   { to: '/clients',  icon: Users,           label: 'Clients' },
   { to: '/projects', icon: FolderKanban,    label: 'Projects' },
@@ -20,6 +22,7 @@ const nav = [
   { to: '/timelogs', icon: Clock,           label: 'Time Logs' },
   { to: '/devices',  icon: Cpu,             label: 'Devices' },
   { to: '/reports',  icon: BarChart2,       label: 'Reports' },
+  { to: '/settings', icon: Settings,        label: 'Settings' },
 ];
 
 function NavList({ onPick }) {
@@ -38,7 +41,7 @@ function NavList({ onPick }) {
           }
         >
           <Icon className="w-5 h-5 md:w-4 md:h-4 flex-shrink-0" />
-          {label}
+          {t(label)}
         </NavLink>
       ))}
     </nav>
@@ -80,7 +83,7 @@ export default function Layout() {
         <button
           onClick={() => setOpen(true)}
           className="p-2 -mr-2 text-slate-300 hover:text-amber-400 transition-colors"
-          aria-label="Open navigation"
+          aria-label={t('Open navigation')}
         >
           <Menu className="w-6 h-6" />
         </button>
@@ -107,7 +110,7 @@ export default function Layout() {
           <button
             onClick={() => setOpen(false)}
             className="md:hidden p-1.5 -mr-1 text-slate-400 hover:text-slate-100"
-            aria-label="Close navigation"
+            aria-label={t('Close navigation')}
           >
             <X className="w-5 h-5" />
           </button>

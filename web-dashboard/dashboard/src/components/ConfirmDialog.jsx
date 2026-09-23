@@ -1,5 +1,6 @@
 import Modal from './Modal';
 import { AlertTriangle } from 'lucide-react';
+import { t } from '../i18n';
 
 export default function ConfirmDialog({ isOpen, onClose, onConfirm, title, message }) {
   return (
@@ -9,8 +10,8 @@ export default function ConfirmDialog({ isOpen, onClose, onConfirm, title, messa
         <p className="text-sm text-slate-300">{message}</p>
       </div>
       <div className="flex justify-end gap-3">
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn-danger" onClick={onConfirm}>Delete</button>
+        <button className="btn-ghost" onClick={onClose}>{t('Cancel')}</button>
+        <button className="btn-danger" onClick={onConfirm}>{t('Delete')}</button>
       </div>
     </Modal>
   );

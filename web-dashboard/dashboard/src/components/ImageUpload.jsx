@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { ImagePlus, X } from 'lucide-react';
+import { t } from '../i18n';
 
 function resizeToDataUrl(file, maxPx = 256, quality = 0.85) {
   return new Promise((resolve) => {
@@ -33,7 +34,7 @@ export default function ImageUpload({ value, onChange, size = 72, label = 'Logo 
 
   return (
     <div>
-      {label && <p className="label">{label} <span className="text-slate-500 font-normal">(optional)</span></p>}
+      {label && <p className="label">{t(label)} <span className="text-slate-500 font-normal">{t('(optional)')}</span></p>}
       <div className="flex items-center gap-4">
         <div
           className="relative flex-shrink-0 rounded-xl overflow-hidden bg-slate-700 border-2 border-dashed border-slate-600 cursor-pointer hover:border-amber-500/60 transition-colors group"
@@ -41,7 +42,7 @@ export default function ImageUpload({ value, onChange, size = 72, label = 'Logo 
           onClick={() => ref.current.click()}
           onDragOver={e => e.preventDefault()}
           onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
-          title="Click or drag an image here"
+          title={t('Click or drag an image here')}
         >
           {value ? (
             <>
@@ -53,7 +54,7 @@ export default function ImageUpload({ value, onChange, size = 72, label = 'Logo 
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-500 group-hover:text-amber-400 transition-colors">
               <ImagePlus className="w-5 h-5" />
-              <span className="text-[10px]">Upload</span>
+              <span className="text-[10px]">{t('Upload')}</span>
             </div>
           )}
         </div>
@@ -64,7 +65,7 @@ export default function ImageUpload({ value, onChange, size = 72, label = 'Logo 
             className="block text-amber-400 hover:text-amber-300 transition-colors"
             onClick={() => ref.current.click()}
           >
-            Choose image…
+            {t('Choose image…')}
           </button>
           <p className="text-slate-500">PNG, JPG, SVG, WebP</p>
           <p className="text-slate-600">Resized to 256 × 256</p>
@@ -74,7 +75,7 @@ export default function ImageUpload({ value, onChange, size = 72, label = 'Logo 
               className="block text-slate-500 hover:text-red-400 transition-colors"
               onClick={() => onChange(null)}
             >
-              <X className="w-3 h-3 inline mr-1" />Remove
+              <X className="w-3 h-3 inline mr-1" />{t('Remove')}
             </button>
           )}
         </div>

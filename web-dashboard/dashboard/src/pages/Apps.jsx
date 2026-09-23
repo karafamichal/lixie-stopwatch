@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import ImageUpload from '../components/ImageUpload';
+import { t } from '../i18n';
 
 const CATEGORY_ORDER = [
   'Design', '3D / Video', 'Office', 'Development',
@@ -75,7 +76,7 @@ export default function Apps() {
       setModalOpen(false);
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      setError(err.response?.data?.error || t('Something went wrong'));
     }
   };
 
@@ -88,7 +89,7 @@ export default function Apps() {
     try {
       await api.apps.remove(deleteTarget.id);
     } catch (err) {
-      setError(err.response?.data?.error || 'Cannot delete');
+      setError(err.response?.data?.error || t('Cannot delete'));
     }
     setDeleteTarget(null);
     load();
@@ -101,13 +102,13 @@ export default function Apps() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Pricing</h1>
+          <h1 className="page-title">{t('Pricing')}</h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            {activeCount} active · {apps.length} total · {customCount} custom
+            {t('{a} active · {t} total · {c} custom', { a: activeCount, t: apps.length, c: customCount })}
           </p>
         </div>
         <button className="btn-primary w-full sm:w-auto" onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Custom App
+          <Plus className="w-4 h-4" /> {t('Add Custom App')}
         </button>
       </div>
 
@@ -124,28 +125,28 @@ export default function Apps() {
                   : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
               }`}
             >
-              {cat}
+              {t(cat)}
             </button>
           ))}
         </div>
         <input
           className="input sm:w-44 sm:ml-auto order-1 sm:order-2"
-          placeholder="Search apps…"
+          placeholder={t('Search apps…')}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
       </div>
 
       {loading ? (
-        <div className="text-center text-slate-500 py-16">Loading…</div>
+        <div className="text-center text-slate-500 py-16">{t('Loading…')}</div>
       ) : visible.length === 0 ? (
-        <div className="text-center text-slate-500 py-16">No apps match your filter.</div>
+        <div className="text-center text-slate-500 py-16">{t('No apps match your filter.')}</div>
       ) : (
         <div className="space-y-5 sm:space-y-6">
           {sortedCats.map(cat => (
             <div key={cat} className="card overflow-hidden">
               <div className="px-4 py-2.5 bg-slate-700/40 border-b border-slate-700">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{cat}</span>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t(cat)}</span>
               </div>
 
               {/* Desktop: table */}
@@ -167,13 +168,13 @@ export default function Apps() {
                             €{a.hourly_rate}/h
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-600 italic">no rate set</span>
+                          <span className="text-xs text-slate-600 italic">{t('no rate set')}</span>
                         )}
                       </td>
                       <td className="td">
                         {a.is_builtin && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-700 text-slate-400">
-                            <Lock className="w-2.5 h-2.5" /> Built-in
+                            <Lock className="w-2.5 h-2.5" /> {t('Built-in')}
                           </span>
                         )}
                       </td>
@@ -181,18 +182,18 @@ export default function Apps() {
                         <div className="flex justify-end gap-1">
                           <button
                             className="icon-btn"
-                            title={a.active ? 'Deactivate' : 'Activate'}
+                            title={a.active ? t('Deactivate') : t('Activate')}
                             onClick={() => toggleActive(a)}
                           >
                             {a.active
                               ? <ToggleRight className="w-5 h-5 text-green-400" />
                               : <ToggleLeft className="w-5 h-5" />}
                           </button>
-                          <button className="icon-btn" title="Edit" onClick={() => openEdit(a)}>
+                          <button className="icon-btn" title={t('Edit')} onClick={() => openEdit(a)}>
                             <Pencil className="w-4 h-4" />
                           </button>
                           {!a.is_builtin && (
-                            <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(a)}>
+                            <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(a)}>
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
@@ -223,26 +224,26 @@ export default function Apps() {
                             €{a.hourly_rate}/h
                           </span>
                         ) : (
-                          <span className="text-[11px] text-slate-600 italic">no rate</span>
+                          <span className="text-[11px] text-slate-600 italic">{t('no rate')}</span>
                         )}
                         {a.is_builtin && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-700 text-slate-400">
-                            <Lock className="w-2.5 h-2.5" /> Built-in
+                            <Lock className="w-2.5 h-2.5" /> {t('Built-in')}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="flex gap-0.5 flex-shrink-0">
-                      <button className="icon-btn" title={a.active ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(a)}>
+                      <button className="icon-btn" title={a.active ? t('Deactivate') : t('Activate')} onClick={() => toggleActive(a)}>
                         {a.active
                           ? <ToggleRight className="w-5 h-5 text-green-400" />
                           : <ToggleLeft className="w-5 h-5" />}
                       </button>
-                      <button className="icon-btn" title="Edit" onClick={() => openEdit(a)}>
+                      <button className="icon-btn" title={t('Edit')} onClick={() => openEdit(a)}>
                         <Pencil className="w-4 h-4" />
                       </button>
                       {!a.is_builtin && (
-                        <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(a)}>
+                        <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(a)}>
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
@@ -258,7 +259,7 @@ export default function Apps() {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editTarget?.is_builtin ? `Edit Rate — ${editTarget.name}` : editTarget ? 'Edit Custom App' : 'Add Custom App'}
+        title={editTarget?.is_builtin ? t('Edit Rate — {name}', { name: editTarget.name }) : editTarget ? t('Edit Custom App') : t('Add Custom App')}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -266,23 +267,23 @@ export default function Apps() {
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">App Name</label>
+                  <label className="label">{t('App Name')}</label>
                   <input
                     className="input"
                     type="text"
                     required
-                    placeholder="e.g. My Tool"
+                    placeholder={t('e.g. My Tool')}
                     value={form.name}
                     onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="label">Category</label>
+                  <label className="label">{t('Category')}</label>
                   <input
                     className="input"
                     type="text"
                     required
-                    placeholder="e.g. Design"
+                    placeholder={t('e.g. Design')}
                     list="cats"
                     value={form.category}
                     onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
@@ -293,7 +294,7 @@ export default function Apps() {
                 </div>
               </div>
               <div>
-                <label className="label">Icon <span className="text-slate-500 font-normal">(paste a single emoji)</span></label>
+                <label className="label">{t('Icon')} <span className="text-slate-500 font-normal">{t('(paste a single emoji)')}</span></label>
                 <input
                   className="input w-24 text-2xl"
                   type="text"
@@ -305,7 +306,7 @@ export default function Apps() {
             </>
           )}
           <div>
-            <label className="label">Hourly Rate <span className="text-slate-500 font-normal">(optional, for billing)</span></label>
+            <label className="label">{t('Hourly Rate')} <span className="text-slate-500 font-normal">{t('(optional, for billing)')}</span></label>
             <div className="relative w-36">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
               <input
@@ -321,16 +322,16 @@ export default function Apps() {
           </div>
           {!editTarget?.is_builtin && (
             <div>
-              <label className="label">Colour</label>
+              <label className="label">{t('Colour')}</label>
               <ColorPicker value={form.color} onChange={c => setForm(p => ({ ...p, color: c }))} />
             </div>
           )}
-          <ImageUpload value={form.logo} onChange={v => setForm(p => ({ ...p, logo: v }))} label="Logo / picture (overrides emoji)" />
+          <ImageUpload value={form.logo} onChange={v => setForm(p => ({ ...p, logo: v }))} label={t('Logo / picture (overrides emoji)')} />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>{t('Cancel')}</button>
             <button type="submit" className="btn-primary">
-              {editTarget ? 'Save Changes' : 'Add App'}
+              {editTarget ? t('Save Changes') : t('Add App')}
             </button>
           </div>
         </form>
@@ -340,8 +341,8 @@ export default function Apps() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Delete App"
-        message={`Delete "${deleteTarget?.name}"? Time logs that used this app will keep the reference.`}
+        title={t('Delete App')}
+        message={t('Delete "{name}"? Time logs that used this app will keep the reference.', { name: deleteTarget?.name })}
       />
     </div>
   );

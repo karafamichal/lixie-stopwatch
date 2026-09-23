@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
 import RemoteDisplay from '../components/RemoteDisplay';
+import { t } from '../i18n';
 
 const BRIGHTNESS_LEVELS = [
   { label: 'Low',  value: 30  },
@@ -201,11 +202,11 @@ export default function Devices() {
       if (!settingsLinked) payload.colon_color = settingsColon;
       const res = await api.devices.setSettings(settingsTarget.id, payload);
       setSettingsFlash(res.delivered
-        ? 'Sent to device.'
-        : 'Saved — device is offline, will apply on next connect.');
+        ? t('Sent to device.')
+        : t('Saved — device is offline, will apply on next connect.'));
       setTimeout(() => setSettingsTarget(null), 1100);
     } catch (e) {
-      setSettingsFlash(e.response?.data?.error || 'Failed to save');
+      setSettingsFlash(e.response?.data?.error || t('Failed to save'));
     } finally {
       setSettingsBusy(false);
     }
@@ -215,19 +216,19 @@ export default function Devices() {
     <div className="flex justify-end gap-1">
       <button
         className="icon-btn"
-        title="Remote control (mirror the display)"
+        title={t('Remote control (mirror the display)')}
         onClick={() => setRemoteTarget(d)}
         disabled={!isOnline(d)}
       >
         <MonitorSmartphone className={`w-4 h-4 ${isOnline(d) ? '' : 'opacity-30'}`} />
       </button>
-      <button className="icon-btn" title="Matrix colour & brightness" onClick={() => openSettings(d)}>
+      <button className="icon-btn" title={t('Matrix colour & brightness')} onClick={() => openSettings(d)}>
         <Palette className="w-4 h-4" />
       </button>
-      <button className="icon-btn" title="Edit label" onClick={() => openEdit(d)}>
+      <button className="icon-btn" title={t('Edit label')} onClick={() => openEdit(d)}>
         <Pencil className="w-4 h-4" />
       </button>
-      <button className="icon-btn-danger" title="Delete" onClick={() => setDeleteTarget(d)}>
+      <button className="icon-btn-danger" title={t('Delete')} onClick={() => setDeleteTarget(d)}>
         <Trash2 className="w-4 h-4" />
       </button>
     </div>
@@ -237,8 +238,8 @@ export default function Devices() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Devices</h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">Devices register automatically on first time log submission</p>
+          <h1 className="page-title">{t('Devices')}</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{t('Devices register automatically on first time log submission')}</p>
         </div>
       </div>
 
@@ -247,20 +248,20 @@ export default function Devices() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-800/60">
-              <th className="th">Status</th>
-              <th className="th">Hardware ID</th>
-              <th className="th">Label</th>
-              <th className="th">Last Seen</th>
-              <th className="th text-right">Actions</th>
+              <th className="th">{t('Status')}</th>
+              <th className="th">{t('Hardware ID')}</th>
+              <th className="th">{t('Label')}</th>
+              <th className="th">{t('Last Seen')}</th>
+              <th className="th text-right">{t('Actions')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="td text-center text-slate-500 py-10">Loading…</td></tr>
+              <tr><td colSpan={5} className="td text-center text-slate-500 py-10">{t('Loading…')}</td></tr>
             ) : devices.length === 0 ? (
               <tr>
                 <td colSpan={5} className="td text-center text-slate-500 py-10">
-                  No devices yet. Devices appear here after the ESP32 sends its first time log.
+                  {t('No devices yet. Devices appear here after the ESP32 sends its first time log.')}
                 </td>
               </tr>
             ) : devices.map(d => {
@@ -269,11 +270,11 @@ export default function Devices() {
                 <tr key={d.id} className="tr">
                   <td className="td">
                     {online
-                      ? <Wifi className="w-4 h-4 text-green-400" title="Online (seen < 5 min ago)" />
-                      : <WifiOff className="w-4 h-4 text-slate-600" title="Offline" />}
+                      ? <Wifi className="w-4 h-4 text-green-400" title={t('Online (seen < 5 min ago)')} />
+                      : <WifiOff className="w-4 h-4 text-slate-600" title={t('Offline')} />}
                   </td>
                   <td className="td font-mono text-sm text-amber-400">{d.hardware_id}</td>
-                  <td className="td text-sm text-slate-300">{d.label || <span className="text-slate-600 italic">no label</span>}</td>
+                  <td className="td text-sm text-slate-300">{d.label || <span className="text-slate-600 italic">{t('no label')}</span>}</td>
                   <td className="td text-sm text-slate-500">
                     {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
                   </td>
@@ -288,26 +289,26 @@ export default function Devices() {
       {/* Mobile: card list */}
       <div className="md:hidden space-y-3">
         {loading ? (
-          <p className="text-center text-slate-500 py-10">Loading…</p>
+          <p className="text-center text-slate-500 py-10">{t('Loading…')}</p>
         ) : devices.length === 0 ? (
-          <p className="text-center text-slate-500 py-10">No devices yet.</p>
+          <p className="text-center text-slate-500 py-10">{t('No devices yet.')}</p>
         ) : devices.map(d => {
           const online = isOnline(d);
           return (
             <div key={d.id} className="card p-3 sm:p-4">
               <div className="flex items-center gap-3 mb-2">
                 {online
-                  ? <Wifi className="w-5 h-5 text-green-400 flex-shrink-0" title="Online" />
-                  : <WifiOff className="w-5 h-5 text-slate-600 flex-shrink-0" title="Offline" />}
+                  ? <Wifi className="w-5 h-5 text-green-400 flex-shrink-0" title={t('Online')} />
+                  : <WifiOff className="w-5 h-5 text-slate-600 flex-shrink-0" title={t('Offline')} />}
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-sm text-amber-400 truncate">{d.hardware_id}</p>
                   <p className="text-xs text-slate-400 truncate">
-                    {d.label || <span className="text-slate-600 italic">no label</span>}
+                    {d.label || <span className="text-slate-600 italic">{t('no label')}</span>}
                   </p>
                 </div>
               </div>
               <p className="text-xs text-slate-500 mb-2">
-                Last seen: {d.last_seen ? new Date(d.last_seen).toLocaleString() : '–'}
+                {t('Last seen: {t}', { t: d.last_seen ? new Date(d.last_seen).toLocaleString() : '–' })}
               </p>
               <div className="border-t border-slate-700/60 pt-2 -mb-1">
                 {deviceActions(d)}
@@ -317,22 +318,22 @@ export default function Devices() {
         })}
       </div>
 
-      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Device Label" size="sm">
+      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title={t('Edit Device Label')} size="sm">
         <form onSubmit={handleSaveLabel} className="space-y-4">
           <p className="text-xs text-slate-500 font-mono">{editTarget?.hardware_id}</p>
           <div>
-            <label className="label">Label</label>
+            <label className="label">{t('Label')}</label>
             <input
               className="input"
               type="text"
-              placeholder="e.g. Room 3 – Station A"
+              placeholder={t('e.g. Room 3 – Station A')}
               value={label}
               onChange={e => setLabel(e.target.value)}
             />
           </div>
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setEditTarget(null)}>Cancel</button>
-            <button type="submit" className="btn-primary">Save Label</button>
+            <button type="button" className="btn-ghost" onClick={() => setEditTarget(null)}>{t('Cancel')}</button>
+            <button type="submit" className="btn-primary">{t('Save Label')}</button>
           </div>
         </form>
       </Modal>
@@ -341,25 +342,25 @@ export default function Devices() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Delete Device"
-        message={`Remove device "${deleteTarget?.hardware_id}"? Time logs from this device are kept.`}
+        title={t('Delete Device')}
+        message={t('Remove device "{id}"? Time logs from this device are kept.', { id: deleteTarget?.hardware_id })}
       />
 
-      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title="Matrix Settings" size="sm">
+      <Modal isOpen={!!settingsTarget} onClose={() => setSettingsTarget(null)} title={t('Matrix Settings')} size="sm">
         <div className="space-y-4">
           <p className="text-xs text-slate-500 font-mono">
             {settingsTarget?.hardware_id}
           </p>
 
           <div>
-            <p className="label mb-2">Clock colour</p>
+            <p className="label mb-2">{t('Clock colour')}</p>
             <ColorPicker value={settingsColor} onChange={setSettingsColor} />
           </div>
 
           <div>
             <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
               <span className="text-sm text-slate-300">
-                Use same colour for the blinking dots
+                {t('Use same colour for the blinking dots')}
               </span>
               <button
                 type="button"
@@ -379,14 +380,14 @@ export default function Devices() {
             </label>
             {!settingsLinked && (
               <div className="mt-3 pl-1">
-                <p className="label mb-2">Colon dot colour</p>
+                <p className="label mb-2">{t('Colon dot colour')}</p>
                 <ColorPicker value={settingsColon} onChange={setSettingsColon} />
               </div>
             )}
           </div>
 
           <div>
-            <p className="label mb-2">LED matrix brightness</p>
+            <p className="label mb-2">{t('LED matrix brightness')}</p>
             <div className="grid grid-cols-4 gap-2">
               {BRIGHTNESS_LEVELS.map((b, i) => {
                 const active = findBrightnessIdx(settingsBright) === i;
@@ -401,19 +402,19 @@ export default function Devices() {
                         : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
                     }`}
                   >
-                    {b.label}
+                    {t(b.label)}
                   </button>
                 );
               })}
             </div>
-            <p className="text-xs text-slate-500 mt-1">Current: {settingsBright} / 255</p>
+            <p className="text-xs text-slate-500 mt-1">{t('Current: {v} / 255', { v: settingsBright })}</p>
           </div>
 
           <div>
             <div className="flex items-baseline justify-between mb-2">
-              <p className="label mb-0">Touch display brightness</p>
+              <p className="label mb-0">{t('Touch display brightness')}</p>
               <span className="text-xs text-slate-500">
-                {settingsDispBri === 0 ? 'display off' : `${settingsDispBri} %`}
+                {settingsDispBri === 0 ? t('display off') : `${settingsDispBri} %`}
               </span>
             </div>
             <input
@@ -424,12 +425,12 @@ export default function Devices() {
               value={settingsDispBri}
               onChange={e => setSettingsDispBri(parseInt(e.target.value, 10))}
               className="w-full accent-amber-500"
-              aria-label="Touch display brightness percent"
+              aria-label={t('Touch display brightness percent')}
             />
           </div>
 
           <div className="space-y-2">
-            <p className="label mb-0">Auto-sleep</p>
+            <p className="label mb-0">{t('Auto-sleep')}</p>
             <div className="flex items-center gap-3">
               <input
                 type="number"
@@ -444,15 +445,15 @@ export default function Devices() {
                 className="input w-24"
               />
               <span className="text-xs text-slate-400">
-                seconds idle before the screen shows just an icon
+                {t('seconds idle before the screen shows just an icon')}
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              0 disables auto-sleep. While running: stopwatch icon. While paused: coffee cup.
+              {t('0 disables auto-sleep. While running: stopwatch icon. While paused: coffee cup.')}
             </p>
             <label className="flex items-center justify-between gap-3 cursor-pointer select-none py-1">
               <span className="text-sm text-slate-300">
-                Also sleep from the idle / home screen (shows the coffee cup)
+                {t('Also sleep from the idle / home screen (shows the coffee cup)')}
               </span>
               <button
                 type="button"
@@ -473,7 +474,7 @@ export default function Devices() {
           </div>
 
           <div>
-            <p className="label mb-2">Touch display language</p>
+            <p className="label mb-2">{t('Touch display language')}</p>
             <div className="grid grid-cols-2 gap-2">
               {DISPLAY_LANGUAGES.map(l => {
                 const active = settingsLang === l.code;
@@ -494,7 +495,7 @@ export default function Devices() {
               })}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Applies to the on-device Nextion screen only; the dashboard stays in English.
+              {t('Applies to the on-device Nextion screen only. The dashboard language is set under Settings.')}
             </p>
           </div>
 
@@ -503,14 +504,14 @@ export default function Devices() {
           )}
 
           <div className="flex justify-end gap-3 pt-1">
-            <button type="button" className="btn-ghost" onClick={() => setSettingsTarget(null)}>Cancel</button>
+            <button type="button" className="btn-ghost" onClick={() => setSettingsTarget(null)}>{t('Cancel')}</button>
             <button
               type="button"
               className="btn-primary"
               disabled={settingsBusy}
               onClick={handleSaveSettings}
             >
-              {settingsBusy ? 'Saving…' : 'Apply'}
+              {settingsBusy ? t('Saving…') : t('Apply')}
             </button>
           </div>
         </div>
@@ -520,7 +521,7 @@ export default function Devices() {
       <Modal
         isOpen={!!remoteTarget}
         onClose={() => setRemoteTarget(null)}
-        title={`Remote — ${remoteTarget?.label || remoteTarget?.hardware_id || ''}`}
+        title={t('Remote — {name}', { name: remoteTarget?.label || remoteTarget?.hardware_id || '' })}
         size="xl"
       >
         {remoteTarget && (

@@ -19,6 +19,12 @@ void loop();
 // True while we're serving the setup page; false during normal operation.
 bool isApMode();
 
+// Dashboard server the device talks to: saved on the setup page, else
+// WS_HOST / WS_PORT from config.h. apiBase() = "http://host:port/api/v1".
+String   serverHost();
+uint16_t serverPort();
+String   apiBase();
+
 // Wipe stored credentials from NVS. Useful for a "Reset WiFi" menu later.
 void forget();
 

@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import json
 import time
 import secrets
@@ -63,6 +64,25 @@ def _send_to_device(hw_id: str, payload: dict) -> bool:
         return False
 
 
+# LED digit style shared by the clock and projects (parsed by the firmware's
+# LedDisplay::parseStyle):
+#   ''                          plain colour
+#   'd:#RRGGBB,...' (6 colours) one colour per digit, H H M M S S
+#   'c:SEC:#RRGGBB,...' (2..8)  all digits fade through the colours every SEC s
+_HEX = r'#[0-9A-F]{6}'
+_LED_STYLE_RE = re.compile(
+    rf'(d:({_HEX},){{5}}{_HEX}|c:(\d{{1,4}}):({_HEX},){{1,7}}{_HEX})?')
+
+
+def _led_style(value):
+    """Normalised style string, or abort(400)."""
+    v = str(value or '').strip().upper().replace('D:', 'd:').replace('C:', 'c:')
+    m = _LED_STYLE_RE.fullmatch(v)
+    if not m or (m.group(3) and not 1 <= int(m.group(3)) <= 3600):
+        abort(400, description='led style must be "", "d:" + 6 colours or "c:SEC:" + 2-8 colours')
+    return v
+
+
 def _migrate(app):
     """Add new columns to existing tables without losing data."""
     with app.app_context():
@@ -89,6 +109,8 @@ def _migrate(app):
                 pending.append('ALTER TABLE project ADD COLUMN completed_at DATETIME')
             if 'budget_hours' not in cols('project'):
                 pending.append('ALTER TABLE project ADD COLUMN budget_hours REAL')
+            if 'led_style' not in cols('project'):
+                pending.append("ALTER TABLE project ADD COLUMN led_style VARCHAR(80) NOT NULL DEFAULT ''")
 
         if 'app' in existing_tables:
             if 'hourly_rate' not in cols('app'):
@@ -496,6 +518,7 @@ def create_app():
             color=data.get('color', '#FF8000'),
             logo=data.get('logo'),
             budget_hours=_budget(data),
+            led_style=_led_style(data.get('led_style')),
         )
         db.session.add(project)
         db.session.commit()
@@ -517,6 +540,8 @@ def create_app():
             project.logo = data['logo']
         if 'budget_hours' in data:
             project.budget_hours = _budget(data)
+        if 'led_style' in data:
+            project.led_style = _led_style(data['led_style'])
         if 'completed' in data:
             val = bool(data['completed'])
             if val and not project.completed:
@@ -786,6 +811,8 @@ def create_app():
     _DEVICE_SETTING_KEYS = (
         'color',
         'colon_color',
+        'clock_style',
+        'demo',
         'brightness',
         'display_brightness',
         'sleep_timeout_sec',
@@ -821,6 +848,8 @@ def create_app():
         Tracked fields:
           - color              clock / stopwatch digit colour ("#RRGGBB")
           - colon_color        the two blinking colon dots    ("#RRGGBB")
+          - clock_style        LED digit style, see _LED_STYLE_RE ('' = plain)
+          - demo               bool — showcase animation instead of the idle clock
           - colon_linked       when True the colon mirrors `color`
                                 automatically; when False `colon_color`
                                 is user-picked
@@ -852,6 +881,8 @@ def create_app():
                 'color':              cached.get('color'),
                 'colon_color':        cached.get('colon_color'),
                 'colon_linked':       cached.get('colon_linked', True),
+                'clock_style':        cached.get('clock_style', ''),
+                'demo':               cached.get('demo', False),
                 'brightness':         cached.get('brightness'),
                 'display_brightness': cached.get('display_brightness'),
                 'sleep_timeout_sec':  cached.get('sleep_timeout_sec'),
@@ -876,6 +907,10 @@ def create_app():
             update['colon_color'] = _check_hex('colon_color', 'colon_color')
         if 'colon_linked' in data:
             update['colon_linked'] = bool(data['colon_linked'])
+        if 'clock_style' in data:
+            update['clock_style'] = _led_style(data['clock_style'])
+        if 'demo' in data:
+            update['demo'] = bool(data['demo'])
         if 'brightness' in data:
             try:
                 b = int(data['brightness'])

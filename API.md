@@ -144,7 +144,14 @@ Returns `201`.
 ### `PUT /projects/<id>`
 
 `POST /projects` and `PUT /projects/<id>` accept `budget_hours` (number ≥ 0;
-`null`, `""` or `0` removes the budget).
+`null`, `""` or `0` removes the budget), and `led_style` — how the LED
+digits look during a session of this project (`""` = client colour):
+
+| `led_style` | Meaning |
+|-------------|---------|
+| `""` | Plain colour |
+| `d:#RRGGBB,…` (6 colours) | One colour per digit, H H M M S S |
+| `c:SEC:#RRGGBB,…` (2–8 colours) | All digits fade through the colours, one round every `SEC` (1–3600) seconds |
 
 Any subset of the create fields, plus:
 
@@ -360,6 +367,8 @@ be sent.
 |-------|------|-------|
 | `color` | `#RRGGBB` | Clock / stopwatch digit colour |
 | `colon_color` | `#RRGGBB` | The two blinking colon dots (independent colour) |
+| `clock_style` | `led_style` string | Per-digit colours or colour cycle for the clock (same format as projects' `led_style`); `""` = plain `color` |
+| `demo` | boolean | Demo / showcase mode: rainbow animation instead of the idle clock. Sessions still display normally. |
 | `colon_linked` | boolean | When `true` the colon colour automatically mirrors `color`; PUTting `colon_color` without an explicit `colon_linked` flips it to `false` |
 | `brightness` | `0..255` | LED matrix brightness (single global FastLED setting) |
 | `display_brightness` | `0..100` | Nextion backlight, in percent. `0` turns the backlight all the way off (controller still responds to commands). |

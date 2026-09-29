@@ -58,6 +58,7 @@ static const int ROW_X = 12, ROW_Y0 = 52, ROW_W = 376;
 // Current selection
 static int sSelClient  = -1;   static String sSelClientName;  static String sSelClientHex;
 static int sSelProject = -1;   static String sSelProjectName; static String sSelProjectHex;
+static String sSelProjectStyle;   // LED digit style; "" = client colour
 static int sSelApp     = -1;   static String sSelAppName;
 static uint16_t sSelClientColor = COL_ACCENT;
 
@@ -128,6 +129,7 @@ static const int     N_BRIGHT_LEVELS   = 4;
 
 // Editor state — set in initSettingsScreen, applied to NVS on Save.
 static int    sTempColorIdx      = 0;
+static bool   sSwatchTapped      = false;  // a preset replaces any dashboard clock style
 static int    sTempBrightIdx     = 3;
 static String sSettingsOrigHex;
 static uint8_t sSettingsOrigBri  = LED_BRIGHTNESS;
@@ -221,7 +223,8 @@ static uint32_t breakLeftSec() {
 // Put the LED matrix in the right mode for the current session state:
 // plain stopwatch, pomodoro focus countdown, or break countdown (green).
 static void syncSessionLeds() {
-    CRGB col = rgb565ToCrgb(sSelClientColor);
+    LedDisplay::Style col = LedDisplay::parseStyle(sSelProjectStyle,
+                                                   rgb565ToCrgb(sSelClientColor));
     if (sOnBreak) {
         LedDisplay::countdown(sBreakEndMs, CRGB(0, 200, 60));
     } else if (pomodoroOn()) {
@@ -721,6 +724,7 @@ static void initSettingsScreen() {
     sTempLang         = sSettingsOrigLang;
 
     sTempColorIdx = 0;
+    sSwatchTapped = false;
     for (int i = 0; i < N_COLOR_PRESETS; i++) {
         if (sSettingsOrigHex.equalsIgnoreCase(COLOR_PRESETS[i].hex)) {
             sTempColorIdx = i;
@@ -737,6 +741,7 @@ static void initSettingsScreen() {
 // the device back exactly where it was.
 static void revertSettingsPreview() {
     LedDisplay::setClockColorHex(sSettingsOrigHex);
+    LedDisplay::setClockStyle(Settings::clockStyle());
     LedDisplay::setBrightness(sSettingsOrigBri);
     Lang::set(sSettingsOrigLang);
 }
@@ -754,6 +759,8 @@ static void onTouchSettings(const NextionTouch& t) {
         if (inRect(t, settingsSwatchX(i), SET_SWATCH_Y,
                    SET_SWATCH_W, SET_SWATCH_H)) {
             sTempColorIdx = i;
+            sSwatchTapped = true;
+            LedDisplay::setClockStyle("");
             LedDisplay::setClockColorHex(COLOR_PRESETS[i].hex);
             sDirty = true;
             return;
@@ -782,6 +789,7 @@ static void onTouchSettings(const NextionTouch& t) {
     // Save
     if (inRect(t, 28, SET_BTN_Y, SET_BTN_W, SET_BTN_H)) {
         Settings::setClockColorHex(COLOR_PRESETS[sTempColorIdx].hex);
+        if (sSwatchTapped) Settings::setClockStyle("");
         Settings::setBrightness   (BRIGHT_LEVELS[sTempBrightIdx]);
         Settings::setLanguage     (sTempLang);
         toast(TR(S_TOAST_SAVED), 900, SCR_IDLE);
@@ -1050,6 +1058,7 @@ static void onTouchProject(const NextionTouch& t) {
     sSelProject     = p.id;
     sSelProjectName = p.name;
     sSelProjectHex  = p.color;
+    sSelProjectStyle = p.style;
     // Fetch the full app catalogue and derive the category set the user
     // will pick from next. The user can also hit "Skip app" on either the
     // category or the app screen to start the session without an app.

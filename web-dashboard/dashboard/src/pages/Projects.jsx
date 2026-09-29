@@ -5,11 +5,12 @@ import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
+import LedStyleEditor from '../components/LedStyleEditor';
 import ImageUpload from '../components/ImageUpload';
 import { t, fmtMoney, locale } from '../i18n';
 import BudgetMeter from '../components/BudgetMeter';
 
-const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null, budget_hours: '' };
+const empty = { name: '', client_id: '', active: true, color: '#FF8000', logo: null, budget_hours: '', led_style: '' };
 
 function fmtDuration(s) {
   const h = Math.floor(s / 3600);
@@ -61,7 +62,7 @@ export default function Projects() {
     setEditTarget(null); setError(''); setModalOpen(true);
   };
   const openEdit = (p) => {
-    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null, budget_hours: p.budget_hours ?? '' });
+    setForm({ name: p.name, client_id: String(p.client_id), active: p.active, color: p.color || '#FF8000', logo: p.logo || null, budget_hours: p.budget_hours ?? '', led_style: p.led_style || '' });
     setEditTarget(p); setError(''); setModalOpen(true);
   };
 
@@ -282,6 +283,11 @@ export default function Projects() {
           <div>
             <label className="label">{t('Colour')}</label>
             <ColorPicker value={form.color} onChange={c => setForm(p => ({ ...p, color: c }))} />
+          </div>
+          <div>
+            <label className="label">{t('Clock digits during a session')}</label>
+            <LedStyleEditor value={form.led_style} onChange={v => setForm(p => ({ ...p, led_style: v }))}
+              baseColor={form.color} plainLabel={t('Client colour')} />
           </div>
           <ImageUpload value={form.logo} onChange={v => setForm(p => ({ ...p, logo: v }))} />
           <label className="flex items-center gap-3 cursor-pointer">

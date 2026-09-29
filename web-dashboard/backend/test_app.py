@@ -46,6 +46,16 @@ def main():
     assert c.put(f"/api/v1/devices/{dev['id']}/settings", json={'night_start': 24}).status_code == 400
     assert c.get(f"/api/v1/devices/{dev['id']}/settings").json['night_end'] == 6
 
+    # LED styles: per-digit, cycle, validation, demo flag.
+    six = ','.join(['#ff0000'] * 6)
+    r = c.put(f"/api/v1/devices/{dev['id']}/settings", json={'clock_style': 'd:' + six, 'demo': True}).json
+    assert r['clock_style'] == 'd:' + six.upper() and r['demo'] is True, r
+    for bad in ('d:#FF0000', 'c:10:#FF0000', 'c:0:#FF0000,#00FF00', 'c:9999:#FF0000,#00FF00', 'x', 'd:' + six + ',#FF0000'):
+        assert c.put(f"/api/v1/devices/{dev['id']}/settings", json={'clock_style': bad}).status_code == 400, bad
+    st = c.put(f"/api/v1/projects/{p['id']}", json={'led_style': 'c:30:#FF0000,#00FF00,#0000FF'}).json
+    assert st['led_style'] == 'c:30:#FF0000,#00FF00,#0000FF'
+    assert c.put(f"/api/v1/projects/{p['id']}", json={'led_style': ''}).json['led_style'] == ''
+
     # Currency.
     assert c.put('/api/v1/settings', json={'currency': 'usd'}).json['currency'] == 'USD'
     assert c.put('/api/v1/settings', json={'currency': 'dollars'}).status_code == 400

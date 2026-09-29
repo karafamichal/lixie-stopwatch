@@ -19,9 +19,9 @@ void setLedBrightness(uint8_t b);
 void initLeds();
 void clearAll();
 
-// Push the six digits (0..9, or -1 to leave that position blank) to the matrix
-// in `color`. Colon LEDs follow the current blink state.
-void showDigits(int d0, int d1, int d2, int d3, int d4, int d5, CRGB color);
+// Push the six digits (0..9, or -1 to leave that position blank) to the matrix,
+// digit p in colors[p]. Colon LEDs follow the current blink state.
+void showDigits(const int d[6], const CRGB colors[6]);
 
 void setColons(bool leftOn, bool rightOn, CRGB color);
 void setColonBlink(bool enabled, unsigned long intervalMs);

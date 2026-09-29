@@ -4,7 +4,7 @@
 //   - server address (API)
 //   - colors, font sizes, NTP servers, etc.
 // Anyone wiring up the hardware must edit WIFI_SSID, WIFI_PASSWORD,
-// API_BASE_URL and HARDWARE_ID.
+// WS_HOST / WS_PORT (or set them on the Wi-Fi setup page) and HARDWARE_ID.
 // ============================================================================
 
 #ifndef CONFIG_H
@@ -44,11 +44,10 @@
 #define AP_PASSWORD             ""           // empty = open AP
 #define WIFI_CONNECT_TIMEOUT_MS 15000UL      // give up on station mode after this
 
-// REST base URL — must end without trailing slash.
-#define API_BASE_URL  "http://changeme:5000/api/v1"
-
-// Live WebSocket channel. Host / port / path are the same server as the API.
-#define WS_HOST       "changeme"
+// Dashboard server — factory defaults only. The captive setup page can
+// override host and port (saved in NVS); see WifiMgr::serverHost().
+// REST lives at http://<host>:<port>/api/v1, the WebSocket at WS_PATH.
+#define WS_HOST       "192.168.137.233"
 #define WS_PORT       5000
 #define WS_PATH       "/api/v1/ws"
 
@@ -57,7 +56,7 @@
 
 // Shown on the dashboard's Devices page. Bump it for every build you push
 // over the air so you can see which devices already run the new image.
-#define FW_VERSION    "1.0.0"
+#define FW_VERSION    "2.0.0"
 
 // Sessions that could not reach the server are kept in NVS and retried
 // once a minute while idle. NVS strings max out at ~4 KB, which fits

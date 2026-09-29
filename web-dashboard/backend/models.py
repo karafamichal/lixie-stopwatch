@@ -75,6 +75,7 @@ class Project(db.Model):
     completed = db.Column(db.Boolean, default=False, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
     budget_hours = db.Column(db.Float, nullable=True)   # planned hours; None = no budget
+    led_style = db.Column(db.String(80), default='', nullable=False)  # see app._LED_STYLE_RE
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     timelogs = db.relationship('TimeLog', backref='project', cascade='all, delete-orphan', lazy='select')
@@ -93,6 +94,7 @@ class Project(db.Model):
             'color': self.color,
             'logo': self.logo,
             'budget_hours': self.budget_hours,
+            'led_style': self.led_style or '',
             'created_at': self.created_at.isoformat(),
         }
 

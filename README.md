@@ -297,7 +297,9 @@ portal — keep reading.
 3. A captive portal should open automatically — if not, browse to
    `http://192.168.4.1/`.
 4. Pick your home / office Wi-Fi from the list, enter the password, hit
-   **Save**. The device stores it to NVS and reboots.
+   **Save**. If your dashboard server is not the build-time default, fill
+   in its IP / hostname and port on the same page. The device stores it
+   all to NVS and reboots.
 5. From then on it auto-connects to that network at every boot. To
    change networks later, hold the front face during boot until you see
    the AP mode banner — or temporarily move it out of range of the saved
@@ -337,7 +339,7 @@ Out of the box the captive portal + the pre-configured RSS feed mean
 
 | What | Where |
 |---|---|
-| Server hostname / IP that the firmware talks to | `nextion-stopwatch/config.h` → `API_BASE_URL`, `WS_HOST` |
+| Default server hostname / IP and port (the captive setup page can override them) | `nextion-stopwatch/config.h` → `WS_HOST`, `WS_PORT` |
 | Default LED brightness and colour | `nextion-stopwatch/config.h` → `LED_BRIGHTNESS`, `COL_ACCENT` (only used until the user overrides them from the dashboard) |
 | Time zone | `config.h` → `TZ_STRING` (POSIX TZ syntax) |
 | RSS news feed | `config.h` → `NEWS_RSS_URL` |

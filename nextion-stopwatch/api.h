@@ -14,6 +14,7 @@ struct Entity {
     String  name;
     String  color;   // "#RRGGBB"
     String  extra;   // icon (apps) or client_name (projects) — context-dependent
+    String  style;   // projects: LED digit style (see LedDisplay::Style), "" = none
 };
 
 #define MAX_ENTITIES 24

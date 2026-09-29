@@ -4,6 +4,7 @@ import * as api from '../api';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ColorPicker from '../components/ColorPicker';
+import LedStyleEditor from '../components/LedStyleEditor';
 import RemoteDisplay from '../components/RemoteDisplay';
 import { t, locale } from '../i18n';
 
@@ -109,6 +110,8 @@ export default function Devices() {
   const [settingsColor,     setSettingsColor]     = useState('#FF8000');
   const [settingsColon,     setSettingsColon]     = useState('#FF8000');
   const [settingsLinked,    setSettingsLinked]    = useState(true);
+  const [settingsStyle,     setSettingsStyle]     = useState('');
+  const [settingsDemo,      setSettingsDemo]      = useState(false);
   const [settingsBright,    setSettingsBright]    = useState(150);
   const [settingsDispBri,   setSettingsDispBri]   = useState(100);     // 0..100 %
   const [settingsSleepSec,  setSettingsSleepSec]  = useState(30);
@@ -232,6 +235,8 @@ export default function Devices() {
       setSettingsColor    (c);
       setSettingsColon    (s.colon_color || c);
       setSettingsLinked   (s.colon_linked !== false);                          // default true
+      setSettingsStyle    (s.clock_style || '');
+      setSettingsDemo     (s.demo === true);
       setSettingsBright   (s.brightness         != null ? s.brightness         : 150);
       setSettingsDispBri  (s.display_brightness != null ? s.display_brightness : 100);
       setSettingsSleepSec (s.sleep_timeout_sec  != null ? s.sleep_timeout_sec  : 30);
@@ -243,6 +248,8 @@ export default function Devices() {
       setSettingsColor('#FF8000');
       setSettingsColon('#FF8000');
       setSettingsLinked(true);
+      setSettingsStyle('');
+      setSettingsDemo(false);
       setSettingsBright(150);
       setSettingsDispBri(100);
       setSettingsSleepSec(30);
@@ -261,6 +268,8 @@ export default function Devices() {
         color:              settingsColor,
         brightness:         settingsBright,
         colon_linked:       settingsLinked,
+        clock_style:        settingsStyle,
+        demo:               settingsDemo,
         display_brightness: settingsDispBri,
         sleep_timeout_sec:  settingsSleepSec,
         sleep_on_idle:      settingsSleepIdle,
@@ -470,6 +479,16 @@ export default function Devices() {
           <div>
             <p className="label mb-2">{t('Clock colour')}</p>
             <ColorPicker value={settingsColor} onChange={setSettingsColor} />
+          </div>
+
+          <div>
+            <p className="label mb-2">{t('Clock colour effect')}</p>
+            <LedStyleEditor value={settingsStyle} onChange={setSettingsStyle} baseColor={settingsColor} />
+          </div>
+
+          <div>
+            <Toggle label={t('Demo mode')} checked={settingsDemo} onChange={setSettingsDemo} />
+            <p className="hint">{t('Shows a rainbow animation instead of the clock while idle — for showing the device off. Sessions still run normally.')}</p>
           </div>
 
           <div>

@@ -8,6 +8,8 @@
 
 static String   sClockHex     = "#FF8000";
 static String   sColonHex     = "#FF8000";
+static String   sClockStyle;             // "" = plain clock colour
+static bool     sDemo         = false;
 static uint8_t  sBrightness   = LED_BRIGHTNESS;
 static uint8_t  sDisplayBri   = 100;     // backlight %
 static uint16_t sSleepTimeout = 30;      // seconds; 0 = disabled
@@ -30,6 +32,8 @@ static void putU8(const char* key, uint8_t v) {
 static void apply() {
     LedDisplay::setClockColorHex(sClockHex);
     LedDisplay::setColonColorHex(sColonHex);
+    LedDisplay::setClockStyle(sClockStyle);
+    LedDisplay::setDemo(sDemo);
     setLedBrightness(sBrightness);
     Nextion::setDim(sDisplayBri);
     Lang::set(sLanguage);
@@ -42,6 +46,8 @@ void begin() {
     p.begin("leds", true);
     sClockHex     = p.getString("color",   "#FF8000");
     sColonHex     = p.getString("colon",   sClockHex);
+    sClockStyle   = p.getString("cstyle",  "");
+    sDemo         = p.getBool  ("demo",    false);
     sBrightness   = p.getUChar ("bright",  LED_BRIGHTNESS);
     sDisplayBri   = p.getUChar ("dispbri", 100);
     sSleepTimeout = p.getUShort("sleeps",  30);
@@ -77,6 +83,28 @@ void setClockColorHex(const String& hex) {
     p.putString("color", hex);
     p.end();
     LedDisplay::setClockColorHex(hex);
+}
+
+String clockStyle() { return sClockStyle; }
+bool   demo()       { return sDemo; }
+
+void setClockStyle(const String& spec) {
+    if (spec.length() > 80) return;
+    sClockStyle = spec;
+    Preferences p;
+    p.begin("leds", false);
+    p.putString("cstyle", spec);
+    p.end();
+    LedDisplay::setClockStyle(spec);
+}
+
+void setDemo(bool on) {
+    sDemo = on;
+    Preferences p;
+    p.begin("leds", false);
+    p.putBool("demo", on);
+    p.end();
+    LedDisplay::setDemo(on);
 }
 
 void setColonColorHex(const String& hex) {

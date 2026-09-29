@@ -14,18 +14,34 @@
 
 namespace LedDisplay {
 
+// How the digits are coloured. Built from a style string (same format the
+// dashboard stores for the clock and for each project):
+//   ""                           one colour (the fallback)
+//   "d:#RRGGBB,...,#RRGGBB"      exactly 6 colours, one per digit (H H M M S S)
+//   "c:SEC:#RRGGBB,#RRGGBB,..."  2..8 colours all digits fade through, one
+//                                full round every SEC seconds
+// A plain CRGB converts implicitly to a one-colour style.
+struct Style {
+    CRGB     c[8];
+    uint8_t  n        = 1;
+    uint16_t cycleSec = 0;    // > 0 = cycle mode
+    Style(CRGB x = CRGB::Black) { c[0] = x; }
+};
+
+// Invalid or empty spec → one-colour style in `fallback`.
+Style parseStyle(const String& spec, CRGB fallback);
+
 void begin();
 
 // Set the running mode (stopwatch). startMs is millis() captured at start.
-// Pass color in CRGB — the client's swatch colour.
-void startStopwatch(uint32_t startMs, CRGB color);
+void startStopwatch(uint32_t startMs, const Style& style);
 
 // Hold the matrix at a fixed duration (used while the user picks Save/Discard).
-void holdDuration(uint32_t totalSeconds, CRGB color);
+void holdDuration(uint32_t totalSeconds, const Style& style);
 
 // Count down to `endMs` (a millis() timestamp) and hold 00:00:00 once it
 // is reached. Used by the pomodoro focus / break timers.
-void countdown(uint32_t endMs, CRGB color);
+void countdown(uint32_t endMs, const Style& style);
 
 // Blink the digits twice a second to draw attention (idle reminder, break
 // over). Works on top of any mode; clockMode() switches it off again.
@@ -39,6 +55,14 @@ void clockMode();
 // is currently in clock mode. setClockColorHex() parses "#RRGGBB" form.
 void setClockColor(CRGB c);
 void setClockColorHex(const String& hex);
+
+// Optional style string (see Style) for clock mode; "" = plain clock colour.
+void setClockStyle(const String& spec);
+
+// Demo / showcase mode: while on, clock mode is replaced by a rainbow
+// animation (real time alternating with rolling digits). Sessions still
+// show their normal stopwatch.
+void setDemo(bool on);
 
 // Independent colour for the two colon LEDs. Stays the same across clock /
 // stopwatch / hold modes — i.e. it does NOT follow the digit colour.

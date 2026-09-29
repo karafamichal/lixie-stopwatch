@@ -48,12 +48,11 @@ void setLedBrightness(uint8_t b) {
     FastLED.show();
 }
 
-void showDigits(int d0, int d1, int d2, int d3, int d4, int d5, CRGB color) {
+void showDigits(const int d[6], const CRGB colors[6]) {
     for (int i = 0; i < 75; i++) leds[i] = CRGB::Black;
 
-    int d[6] = {d0, d1, d2, d3, d4, d5};
     for (int p = 0; p < 6; p++) {
-        if (d[p] >= 0 && d[p] <= 9) leds[ledIndex[p][d[p]]] = color;
+        if (d[p] >= 0 && d[p] <= 9) leds[ledIndex[p][d[p]]] = colors[p];
     }
 
     leds[LED_COLON_LEFT]  = colonLeftState  ? colonColor : CRGB::Black;

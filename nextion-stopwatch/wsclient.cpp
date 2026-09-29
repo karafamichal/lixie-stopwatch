@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "lang.h"
 #include "api.h"
+#include "wifimgr.h"
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <HTTPUpdate.h>
@@ -16,7 +17,7 @@ static const char* sLastStateName  = "";   // detect changes for immediate push
 static const char* sLastScreenName = "";   // finer-grained change detection
 
 // Firmware update requested by the dashboard. sOtaPath is relative to
-// API_BASE_URL; sOtaStatus is reported in every state push ("" = nothing
+// WifiMgr::apiBase(); sOtaStatus is reported in every state push ("" = nothing
 // to report, "waiting" = queued until the session ends, "failed").
 static String sOtaPath;
 static String sOtaStatus;
@@ -50,6 +51,8 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
             //   { "type": "settings",
             //     "color":              "#RRGGBB",   // clock/stopwatch digits
             //     "colon_color":        "#RRGGBB",   // the two dots
+            //     "clock_style":        "d:...|c:..."// per-digit / cycle, "" = off
+            //     "demo":               bool,        // showcase animation
             //     "brightness":         0..255,      // LED matrix brightness
             //     "display_brightness": 0..100,      // Nextion backlight %
             //     "sleep_timeout_sec":  0..65535,    // 0 disables auto-sleep
@@ -75,6 +78,12 @@ static void onEvent(WStype_t type, uint8_t* payload, size_t length) {
                 }
                 if (doc["colon_color"].is<const char*>()) {
                     Settings::setColonColorHex(doc["colon_color"].as<String>());
+                }
+                if (doc["clock_style"].is<const char*>()) {
+                    Settings::setClockStyle(doc["clock_style"].as<String>());
+                }
+                if (doc["demo"].is<bool>()) {
+                    Settings::setDemo(doc["demo"].as<bool>());
                 }
                 if (doc["brightness"].is<int>()) {
                     int b = doc["brightness"].as<int>();
@@ -198,7 +207,7 @@ static void pushState() {
 namespace WsClient {
 
 void begin() {
-    ws.begin(WS_HOST, WS_PORT, WS_PATH);
+    ws.begin(WifiMgr::serverHost(), WifiMgr::serverPort(), WS_PATH);
     ws.onEvent(onEvent);
     ws.setReconnectInterval(5000);
     // Liveness pings — sent every 15 s, disconnect if no pong in 3 attempts.
@@ -237,7 +246,7 @@ void runPendingOta() {
     if (UI::sessionActive() || (scr != UI::SCR_IDLE && scr != UI::SCR_SLEEP)) return;
     if (WiFi.status() != WL_CONNECTED) return;
 
-    String url = String(API_BASE_URL) + sOtaPath;
+    String url = WifiMgr::apiBase() + sOtaPath;
     sOtaPath = "";
     Serial.printf("[ota] installing from %s\n", url.c_str());
     UI::showBootMessage(TR(S_UPDATING));

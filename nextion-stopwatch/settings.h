@@ -18,6 +18,15 @@ void begin();                              // load NVS values and apply them
 String  clockColorHex();
 void    setClockColorHex(const String& hex);
 
+// Optional digit style for the clock (per-digit colours or a colour cycle,
+// format in leddisplay.h); "" = plain clockColorHex(). Dashboard-only.
+String  clockStyle();
+void    setClockStyle(const String& spec);
+
+// Demo / showcase animation instead of the idle clock. Dashboard-only.
+bool demo();
+void setDemo(bool on);
+
 // Independent colour for the two colon LEDs. Only the web dashboard edits
 // this — the on-device menu does not expose it, since it's a power-user knob.
 String  colonColorHex();

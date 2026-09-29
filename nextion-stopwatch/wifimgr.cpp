@@ -9,6 +9,8 @@ static Preferences prefs;
 static WebServer   server(80);
 static DNSServer   dnsServer;
 static bool        sApMode = false;
+static String      sHost   = WS_HOST;
+static uint16_t    sPort   = WS_PORT;
 
 // HTML-escape the few characters we care about for safe SSID display.
 static String htmlEsc(const String& s) {
@@ -97,6 +99,13 @@ static String renderPage(const String& flash) {
     h += F("</select>"
            "<label>Password</label>"
            "<input name='pass' type='password' placeholder='leave empty for open networks'>"
+           "<label>Dashboard server (IP or hostname)</label>"
+           "<input name='host' maxlength='63' value='");
+    h += htmlEsc(sHost);
+    h += F("'><label>Port</label>"
+           "<input name='port' type='number' min='1' max='65535' value='");
+    h += String(sPort);
+    h += F("'>"
            "<button type='submit'>Save &amp; Connect</button>"
            "</form>"
            "<div class='foot'>The device restarts after saving. "
@@ -112,14 +121,28 @@ static void handleHotspot()   { server.send(200, "text/html", renderPage("")); }
 static void handleSave() {
     String ssid = server.arg("ssid");
     String pass = server.arg("pass");
+    String host = server.arg("host");
+    host.trim();
+    long   port = server.arg("port").length() ? server.arg("port").toInt() : WS_PORT;
     if (ssid.length() == 0) {
         server.send(400, "text/html",
                     renderPage("SSID is required."));
         return;
     }
+    // Host goes straight into URLs, so allow only hostname / IPv4 characters.
+    bool hostOk = host.length() > 0 && host.length() < 64;
+    for (size_t i = 0; hostOk && i < host.length(); i++)
+        hostOk = isalnum((unsigned char)host[i]) || host[i] == '.' || host[i] == '-';
+    if (!hostOk || port < 1 || port > 65535) {
+        server.send(400, "text/html",
+                    renderPage("Server must be an IP or hostname, port 1-65535."));
+        return;
+    }
     prefs.begin("wifi", false);
     prefs.putString("ssid", ssid);
     prefs.putString("pass", pass);
+    prefs.putString("host", host);
+    prefs.putUShort("port", (uint16_t)port);
     prefs.end();
 
     server.send(200, "text/html",
@@ -167,7 +190,10 @@ bool begin() {
     prefs.begin("wifi", true);
     String savedSsid = prefs.getString("ssid", "");
     String savedPass = prefs.getString("pass", "");
+    sHost            = prefs.getString("host", WS_HOST);
+    sPort            = prefs.getUShort("port", WS_PORT);
     prefs.end();
+    Serial.printf("[wifi] server %s:%u\n", sHost.c_str(), sPort);
 
     if (savedSsid.length() &&
         tryStation(savedSsid.c_str(), savedPass.c_str())) {
@@ -193,6 +219,10 @@ void loop() {
 }
 
 bool isApMode() { return sApMode; }
+
+String   serverHost() { return sHost; }
+uint16_t serverPort() { return sPort; }
+String   apiBase()    { return "http://" + sHost + ":" + String(sPort) + "/api/v1"; }
 
 void forget() {
     prefs.begin("wifi", false);

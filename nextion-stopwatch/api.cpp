@@ -8,6 +8,7 @@
 #include "api.h"
 #include "config.h"
 #include "utf8cp1250.h"
+#include "wifimgr.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -81,7 +82,7 @@ namespace Api {
 
 int fetchClients(Entity* out, int max) {
     JsonDocument doc;
-    int code = httpGetJson(String(API_BASE_URL) + "/clients", doc);
+    int code = httpGetJson(WifiMgr::apiBase() + "/clients", doc);
     if (code != 200) return -1;
 
     int n = 0;
@@ -99,7 +100,7 @@ int fetchClients(Entity* out, int max) {
 
 int fetchProjects(int clientId, Entity* out, int max) {
     JsonDocument doc;
-    String url = String(API_BASE_URL) + "/projects?client_id=" + String(clientId);
+    String url = WifiMgr::apiBase() + "/projects?client_id=" + String(clientId);
     int code = httpGetJson(url, doc);
     if (code != 200) return -1;
 
@@ -110,6 +111,7 @@ int fetchProjects(int clientId, Entity* out, int max) {
         out[n].name  = utf8ToAscii(obj["name"].as<const char*>());
         out[n].color = obj["color"].as<const char*>();
         out[n].extra = utf8ToAscii(obj["client_name"].as<const char*>());
+        out[n].style = obj["led_style"] | "";
         n++;
     }
     return n;
@@ -117,7 +119,7 @@ int fetchProjects(int clientId, Entity* out, int max) {
 
 int fetchApps(Entity* out, int max) {
     JsonDocument doc;
-    int code = httpGetJson(String(API_BASE_URL) + "/apps", doc);
+    int code = httpGetJson(WifiMgr::apiBase() + "/apps", doc);
     if (code != 200) return -1;
 
     int n = 0;
@@ -142,7 +144,7 @@ int postTimelog(int clientId, int projectId, int appId,
 
     HTTPClient http;
     http.setTimeout(5000);
-    if (!http.begin(String(API_BASE_URL) + "/timelogs")) return -2;
+    if (!http.begin(WifiMgr::apiBase() + "/timelogs")) return -2;
     http.addHeader("Content-Type", "application/json");
 
     JsonDocument req;
@@ -219,7 +221,7 @@ bool sendHeartbeat() {
 
     HTTPClient http;
     http.setTimeout(3000);
-    String url = String(API_BASE_URL) + "/devices/heartbeat";
+    String url = WifiMgr::apiBase() + "/devices/heartbeat";
     if (!http.begin(url)) {
         Serial.println("[heartbeat] begin() failed");
         return false;
